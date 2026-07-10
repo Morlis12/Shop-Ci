@@ -1,0 +1,112 @@
+version: 2
+
+semantic_models:
+
+  # =========================================================================
+  # MODÈLE SÉMANTIQUE : VENTES
+  # Déclare comment interpréter fait_ventes : ses entités (clés), ses
+  # dimensions (axes d'analyse) et ses mesures (agrégations de base).
+  # =========================================================================
+  - name: ventes
+    description: "Lignes de vente de BoutiqueCI."
+    model: ref('fait_ventes')
+    defaults:
+      agg_time_dimension: jour_commande
+
+    entities:
+      - name: ligne_vente
+        type: primary
+        expr: id_ligne
+      - name: client
+        type: foreign
+        expr: id_client
+      - name: produit
+        type: foreign
+        expr: id_produit
+
+    dimensions:
+      - name: jour_commande
+        type: time
+        type_params:
+          time_granularity: day
+      - name: statut
+        type: categorical
+      - name: canal
+        type: categorical
+
+    measures:
+      - name: montant_total
+        description: "Somme des montants de lignes."
+        agg: sum
+        expr: montant_ligne
+      - name: marge_totale
+        agg: sum
+        expr: marge_ligne
+      - name: quantite_totale
+        agg: sum
+        expr: quantite
+      - name: nb_lignes
+        agg: count
+        expr: id_ligne
+      - name: nb_commandes
+        description: "Commandes distinctes touchées."
+        agg: count_distinct
+        expr: id_commande
+
+metrics:
+
+  # ---- Métriques simples ----
+  - name: ca_brut
+    label: "CA brut"
+    description: "Chiffre d'affaires toutes commandes confondues (y compris annulées/retournées)."
+    type: simple
+    type_params:
+      measure: montant_total
+
+  # ---- Métrique GOUVERNÉE : LA définition officielle du CA ----
+  - name: ca_officiel
+    label: "CA officiel"
+    description: "Chiffre d'affaires des commandes effectivement réalisées : exclut les commandes annulées et retournées. C'est LA définition de référence de l'entreprise."
+    type: simple
+    type_params:
+      measure: montant_total
+    filter: |
+      {{ Dimension('ligne_vente__statut') }} not in ('annulee', 'retournee')
+
+  - name: marge
+    label: "Marge brute"
+    type: simple
+    type_params:
+      measure: marge_totale
+    filter: |
+      {{ Dimension('ligne_vente__statut') }} not in ('annulee', 'retournee')
+
+  # ---- Métrique RATIO : calculée à partir d'autres métriques ----
+  - name: taux_marge
+    label: "Taux de marge (%)"
+    description: "Marge brute / CA officiel."
+    type: ratio
+    type_params:
+      numerator: marge
+      denominator: ca_officiel
+
+  # ---- Métrique DÉRIVÉE : panier moyen ----
+  - name: panier_moyen
+    label: "Panier moyen"
+    description: "CA officiel / nombre de commandes."
+    type: derived
+    type_params:
+      expr: ca / commandes
+      metrics:
+        - name: ca_officiel
+          alias: ca
+        - name: nb_commandes_officiel
+          alias: commandes
+
+  - name: nb_commandes_officiel
+    label: "Nb commandes"
+    type: simple
+    type_params:
+      measure: nb_commandes
+    filter: |
+      {{ Dimension('ligne_vente__statut') }} not in ('annulee', 'retournee')
