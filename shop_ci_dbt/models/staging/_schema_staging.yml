@@ -1,0 +1,117 @@
+version: 2
+
+models:
+  - name: stg_clients
+    description: "Clients épurés : emails minuscules, pays normalisés, doublons supprimés."
+    columns:
+      - name: id_client
+        tests: [unique, not_null]
+      - name: email
+        tests: [unique, not_null]
+      - name: date_inscription
+        tests: [not_null]
+
+  - name: stg_commandes
+    description: "Commandes : dates unifiées, statuts et canaux normalisés."
+    columns:
+      - name: id_commande
+        tests: [unique, not_null]
+      - name: id_client
+        tests:
+          - not_null
+          # SEUL test en "warn" du projet, et c'est une DÉCISION :
+          # les orphelines sont une anomalie connue, documentée et traitée
+          # en aval (int_correspondance_clients + membre -1).
+          # Le warn sert de compteur de surveillance, pas d'alarme.
+          - relationships:
+              arguments:
+                to: ref('stg_clients')
+                field: id_client
+              config:
+                severity: warn
+      - name: date_commande
+        tests: [not_null]
+      - name: statut
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['livree', 'retournee', 'en_preparation', 'annulee', 'expediee']
+      - name: canal
+        tests: [not_null]
+
+  - name: stg_lignes_commande
+    description: "Détail produit par produit de chaque commande."
+    columns:
+      - name: id_ligne
+        tests: [unique, not_null]
+      - name: id_commande
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_commandes')
+                field: id_commande
+      - name: id_produit
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_produits')
+                field: id_produit
+      - name: quantite
+        tests: [not_null]
+
+  - name: stg_paiements
+    description: "Paiements : retries flaggés, méthodes unifiées."
+    columns:
+      - name: id_paiement
+        tests: [unique, not_null]
+      - name: id_commande
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('stg_commandes')
+                field: id_commande
+      - name: montant
+        tests: [not_null]
+      - name: methode
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['carte_bancaire', 'mobile_money', 'paiement_livraison']
+      - name: statut_paiement
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ['reussi', 'echoue']
+      - name: est_reussi
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false    # sans ça, dbt comparerait aux chaînes '0'/'1'
+      - name: est_doublon
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+
+  - name: stg_produits
+    description: "Catalogue produits : prix numériques, catégories vides en NULL."
+    columns:
+      - name: id_produit
+        tests: [unique, not_null]
+      - name: prix_unitaire
+        tests: [not_null]
+      - name: cout_unitaire
+        tests: [not_null]
+      - name: statut
+        tests:
+          - accepted_values:
+              arguments:
+                values: ['actif', 'inactif']

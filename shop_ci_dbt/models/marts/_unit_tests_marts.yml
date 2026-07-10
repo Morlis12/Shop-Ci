@@ -1,0 +1,29 @@
+version: 2
+
+unit_tests:
+
+  - name: ut_calcul_mesures_et_orphelins_fait_ventes
+    description: "montant/coût/marge = quantité × tarifs produit. Un id_client sans correspondance doit être re-routé vers -1 (membre inconnu)."
+    model: fait_ventes
+    overrides:
+      macros:
+        is_incremental: false
+    given:
+      - input: ref('stg_lignes_commandes')
+        rows:
+          - {id_ligne: 1, id_commande: 10, id_produit: 7, quantite: 3}
+          - {id_ligne: 2, id_commande: 20, id_produit: 7, quantite: 1}
+      - input: ref('stg_commandes')
+        rows:
+          - {id_commande: 10, id_client: 5, jour_commande: "2024-03-01", statut: "livree", canal: "site_web"}
+          - {id_commande: 20, id_client: 999, jour_commande: "2024-03-02", statut: "livree", canal: "whatsapp"}
+      - input: ref('stg_produits')
+        rows:
+          - {id_produit: 7, prix_unitaire: 1000, cout_unitaire: 600}
+      - input: ref('int_correspondance_clients')
+        rows:
+          - {id_client: 5, id_client_valide: 5}
+    expect:
+      rows:
+        - {id_ligne: 1, id_client: 5, montant_ligne: 3000, cout_ligne: 1800, marge_ligne: 1200}
+        - {id_ligne: 2, id_client: -1, montant_ligne: 1000, cout_ligne: 600, marge_ligne: 400}

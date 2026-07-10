@@ -1,0 +1,201 @@
+version: 2
+
+models:
+
+  # =========================================================================
+  # DIMENSION : CLIENTS
+  # Le QUI du modèle en étoile. Sans PII (email/téléphone exclus - RGPD).
+  # Contient le membre inconnu id=-1 pour les faits orphelins (Kimball).
+  # =========================================================================
+  - name: dim_clients
+    description: "Dimension clients (sans PII), avec membre inconnu id=-1."
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: id_client
+        data_type: integer
+        tests: [unique, not_null]
+      - name: nom_complet
+        data_type: varchar
+      - name: ville
+        data_type: varchar
+      - name: pays
+        data_type: varchar
+      - name: date_inscription
+        data_type: date
+
+  # =========================================================================
+  # DIMENSION : PRODUITS
+  # Le QUOI du modèle en étoile. Catégories vides remplacées par
+  # 'Non catégorisé' en amont (dim), prix et coûts numériques.
+  # =========================================================================
+  - name: dim_produits
+    description: "Dimension produits."
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: id_produit
+        data_type: integer
+        tests: [unique, not_null]
+      - name: nom_produit
+        data_type: varchar
+      - name: categorie
+        data_type: varchar
+      - name: prix_unitaire
+        data_type: integer
+      - name: cout_unitaire
+        data_type: integer
+      - name: statut
+        data_type: varchar
+
+  # =========================================================================
+  # DIMENSION : CALENDRIER
+  # Le QUAND du modèle en étoile. Table GÉNÉRÉE (une ligne par jour),
+  # équivalent de la table de dates Power BI.
+  # =========================================================================
+  - name: dim_calendrier
+    description: "Dimension calendrier générée, un jour par ligne."
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: jour
+        data_type: date
+        tests: [unique, not_null]
+      - name: annee
+        data_type: bigint          # extract() renvoie du BIGINT dans DuckDB !
+      - name: numero_mois
+        data_type: bigint
+      - name: nom_mois
+        data_type: varchar
+      - name: annee_mois
+        data_type: varchar
+      - name: numero_jour_semaine
+        data_type: bigint
+      - name: nom_jour
+        data_type: varchar
+      - name: est_weekend
+        data_type: boolean
+
+  # =========================================================================
+  # FAIT : VENTES
+  # GRAIN : une ligne = UN produit dans UNE commande.
+  # Toutes les mesures sont vraies à ce grain. Les relationships vers les
+  # dimensions sont en severity ERROR : après re-routage + membre -1,
+  # aucun orphelin n'a le droit d'exister ici.
+  # =========================================================================
+  - name: fait_ventes
+    description: "Faits ventes. Grain : une ligne de commande."
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: id_ligne
+        data_type: integer
+        tests: [unique, not_null]    # le GRAIN : s'il casse, tout ment
+      - name: id_commande
+        data_type: integer
+      - name: id_client
+        data_type: integer
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_clients')
+                field: id_client
+      - name: id_produit
+        data_type: integer
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_produits')
+                field: id_produit
+      - name: jour_commande
+        data_type: date
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_calendrier')
+                field: jour
+      - name: statut
+        data_type: varchar
+      - name: canal
+        data_type: varchar
+      - name: quantite
+        data_type: integer
+        tests: [not_null]
+      - name: montant_ligne
+        data_type: integer
+        tests: [not_null]
+      - name: cout_ligne
+        data_type: integer
+      - name: marge_ligne
+        data_type: integer
+      - name: date_commande_chargement
+        data_type: timestamp
+        tests: [not_null]
+
+  # =========================================================================
+  # FAIT : PAIEMENTS
+  # GRAIN : une ligne = UN paiement (une commande entière).
+  # Grain différent de fait_ventes -> table séparée (constellation).
+  # Flags : est_reussi (statut), est_doublon (retry technique),
+  # vrai_reussi (raccourci analyste = reussi ET non doublon).
+  # =========================================================================
+  - name: fait_paiements
+    description: "Faits paiements. Grain : un paiement."
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: id_paiement
+        data_type: integer
+        tests: [unique, not_null]
+      - name: id_commande
+        data_type: integer
+      - name: id_client
+        data_type: integer
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_clients')
+                field: id_client
+      - name: jour_commande
+        data_type: date
+      - name: canal
+        data_type: varchar
+      - name: methode
+        data_type: varchar
+      - name: statut_paiement
+        data_type: varchar
+      - name: est_reussi
+        data_type: integer
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: est_doublon
+        data_type: integer
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: vrai_reussi
+        data_type: integer
+        tests:
+          - accepted_values:
+              arguments:
+                values: [0, 1]
+                quote: false
+      - name: montant
+        data_type: integer
+        tests: [not_null]
+      - name: date_commande_chargement
+        data_type: timestamp

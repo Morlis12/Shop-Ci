@@ -1,0 +1,45 @@
+version: 2
+
+unit_tests:
+
+  - name: ut_nettoyage_dates_et_statuts_commandes
+    description: "La cascade de dates (macro nettoyer_date) doit parser les 3 familles de formats, renvoyer NULL sur un format inconnu, et le statut doit être normalisé."
+    model: stg_commandes
+    given:
+      - input: source('source_brut', 'commandes')
+        format: sql
+        rows: |
+          select '1' as id_commande, '10' as id_client, '2024-01-25 15:30:00' as date_commande, 'livree' as statut, 'site_web' as canal
+          union all
+          select '2', '11', '17/05/2023 09:15', 'LIVREE', 'appli_mobile'
+          union all
+          select '3', '12', '04-18-2024', 'annulee', 'whatsapp'
+          union all
+          select '4', '13', '25 janvier 2024', 'expediee', 'site_web'
+    expect:
+      rows:
+        - {id_commande: 1, date_commande: "2024-01-25 15:30:00", statut: "livree"}
+        - {id_commande: 2, date_commande: "2023-05-17 09:15:00", statut: "livree"}
+        - {id_commande: 3, date_commande: "2024-04-18 00:00:00", statut: "annulee"}
+        - {id_commande: 4, date_commande: null, statut: "expediee"}
+
+  - name: ut_flags_doublons_paiements
+    description: "Un 2e paiement réussi sur la même commande = doublon. Un réussi après un échoué = légitime (pas doublon)."
+    model: stg_paiements
+    given:
+      - input: source('source_brut', 'paiements')
+        format: sql
+        rows: |
+          select '1' as id_paiement, '100' as id_commande, '5000' as montant, 'mobile_money' as methode, 'reussi' as statut_paiement
+          union all
+          select '2', '100', '5000', 'mobile_money', 'reussi'
+          union all
+          select '3', '200', '8000', 'carte_bancaire', 'echoue'
+          union all
+          select '4', '200', '8000', 'Mobile Money', 'reussi'
+    expect:
+      rows:
+        - {id_paiement: 1, est_reussi: 1, est_doublon: 0, methode: "mobile_money"}
+        - {id_paiement: 2, est_reussi: 1, est_doublon: 1, methode: "mobile_money"}
+        - {id_paiement: 3, est_reussi: 0, est_doublon: 0, methode: "carte_bancaire"}
+        - {id_paiement: 4, est_reussi: 1, est_doublon: 0, methode: "mobile_money"}

@@ -1,0 +1,21 @@
+id_produit,nom_produit,categorie,prix_unitaire,cout_unitaire,statut
+1,Pagne wax 6 yards,Textile,12500 XOF,5717,inactif
+2,Chemise en lin,Vêtements,18000,9906,actif
+3,Robe imprimée,Vêtements,22000,14825,actif
+4,Sandales cuir,Chaussures,15000 XOF,9268,actif
+5,Baskets urbaines,Chaussures,35000,17829,actif
+6,Sac à main tressé,Accessoires,9500 XOF,6300,actif
+7,Collier perles,Accessoires,4500,2416,ACTIF
+8,Beurre de karité 500g,Cosmétique,3000 XOF,1990,actif
+9,Savon noir artisanal,Cosmétique,1500 XOF,787,actif
+10,Huile de coco 250ml,Cosmétique,2800,1673,actif
+11,Café Robusta 1kg,Épicerie,6500 XOF,3570,inactif
+12,Cacao en poudre 500g,Épicerie,4200 XOF,2178,ACTIF
+13,Attiéké déshydraté 1kg,Épicerie,3500,2350,actif
+14,Miel de forêt 750g,,5800,2882,actif
+15,Panier en rotin,Maison,8000,3769,inactif
+16,Statuette en bois,Maison,25000,13387,actif
+17,Nappe brodée,Maison,11000,6923,actif
+18,Lampe artisanale,Maison,19500 XOF,12711,inactif
+19,Djembé mini,Culture,30000,20990,ACTIF
+20,Livre - Cuisine ivoirienne,Culture,7500,3930,actif

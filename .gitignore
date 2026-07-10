@@ -1,0 +1,21 @@
+@"
+# Environnement Python : propre a chaque machine, jamais partage
+.venv/
+
+# Bases de donnees locales : reconstructibles par dbt build
+*.duckdb
+*.duckdb.wal
+
+# Artefacts dbt : regeneres a chaque execution
+shop_ci_dbt/target/
+shop_ci_dbt/dbt_packages/
+shop_ci_dbt/logs/
+logs/
+
+# Rapports d'audit generes
+Audits/*.html
+
+# Editeur / systeme
+.vscode/
+__pycache__/
+"@ | Out-File -Encoding utf8 .gitignore

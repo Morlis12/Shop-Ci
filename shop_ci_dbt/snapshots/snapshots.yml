@@ -1,0 +1,29 @@
+version: 2
+
+snapshots:
+
+  # =========================================================================
+  # SNAPSHOT : PRODUITS
+  # Historise les attributs mutables critiques : prix, coût, statut.
+  # Stratégie "check" : dbt compare ces colonnes à chaque exécution ;
+  # si l'une change, l'ancienne ligne est fermée (dbt_valid_to renseigné)
+  # et une nouvelle version s'ouvre. C'est du SCD Type 2 automatique.
+  # =========================================================================
+  - name: snap_produits
+    relation: ref('stg_produits')
+    config:
+      unique_key: id_produit
+      strategy: check
+      check_cols: [prix_unitaire, cout_unitaire, statut]
+
+  # =========================================================================
+  # SNAPSHOT : CLIENTS
+  # Historise les attributs géographiques (déménagements) pour que les
+  # analyses par ville/pays restent vraies dans le temps.
+  # =========================================================================
+  - name: snap_clients
+    relation: ref('stg_clients')
+    config:
+      unique_key: id_client
+      strategy: check
+      check_cols: [ville, pays]
