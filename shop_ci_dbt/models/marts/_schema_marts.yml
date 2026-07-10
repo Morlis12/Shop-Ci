@@ -199,3 +199,19 @@ models:
         tests: [not_null]
       - name: date_commande_chargement
         data_type: timestamp
+     
+ # =========================================================================
+  - name: dim_calendrier
+    description: "Dimension calendrier générée, un jour par ligne."
+    config:
+      contract:
+        enforced: true
+    time_spine:
+      standard_granularity_column: jour
+    columns:
+      - name: jour
+        data_type: date
+        granularity: day
+        tests: [unique, not_null]
+      - name: annee
+        data_type: bigint
