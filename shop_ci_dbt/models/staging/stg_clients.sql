@@ -33,7 +33,7 @@ cleaned_data as (
             else trim(cast(pays as varchar))
         end as pays,
 
-        -- 4. standardisation de la date d'inscription
+        -- 4. standardisation de la date d'inscription via une macro (pour faciliter la maintenance si on veut changer le format de date)
 cast({{ nettoyer_date('date_inscription') }} as date) as date_inscription,
 
         nullif(trim(cast(telephone as varchar)), '') as telephone
