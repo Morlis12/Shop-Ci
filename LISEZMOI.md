@@ -62,14 +62,32 @@ pip install duckdb
 ```
 Place les 5 CSV dans un dossier `data_brute/` et dis-moi quand tu es prêt : on écrira ensemble tes premières requêtes d'audit.
 
-Audit
+* Audit
 All stg => Final CTE not nul Id (Flag)
 Tester doublons de ligne 
+Donner le bon type à chacun
 
-Clients : 
+# Clients : 
 -Email: ya 10 dublons, penser au trim lower 
 -Pays : il ya les valeurs CI ,SN creer la correspondance au vrai pays,penser au trim lower ,Lister tous les elements distinct de pays pour visualiser
  test pour lister les pays pour pointer la liste de correspondance
 -Date dinscription : creer la transformation e formatage complet 
 -Nom et prenom : Colonne calculée 
 -Ville lower .....
+
+# Commandes 
+-Date de commandes :creer la transformation e formatage complet
+-Statut et canal : , normaliser . Mais lister d'abord 
+-Id client : Test pour savoir si chaque id client dans la commande a vraiemnt un client dans la tabel client
+
+# lignes_commande
+
+# paiements
+Methode et statut paiement : normaliser 
+Id commande : Donc dans le stagging il faut creer un flag IS_real_reussi avec ROWNUMBER (unique valeur) de tel sorte dans le CTE final on were IS_real_reussi
+
+# produits
+id produit cest est bien distinc 
+categorie et nom_prouit on va les noormaliser
+prix unitaire et cout unitaire on garer les premier chibre avant le vide car il y a des nombre ecrti exemeple 100 XOF 
+noramliser statut
