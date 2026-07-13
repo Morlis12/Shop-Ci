@@ -7,7 +7,7 @@ unit_tests:
     model: fait_ventes
     overrides:
       macros:
-        is_incremental: false
+        is_incremental: true
     given:
       - input: ref('stg_lignes_commandes')
         rows:

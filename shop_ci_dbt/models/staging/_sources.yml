@@ -1,15 +1,12 @@
-# "version: 2" = version du FORMAT de fichier YAML dbt (pas ton projet).
-# C'est toujours 2 aujourd'hui, ne cherche pas plus loin. 😄
 version: 2
 
 sources:
-  # Un "source" = un SYSTÈME source. Ici on n'en a qu'un : nos exports CSV bruts.
-  # En entreprise on en aurait plusieurs : "crm", "erp", "google_analytics"...
   - name: source_brut
     description: "Données brutes de BoutiqueCI, exportées telles quelles des systèmes sources (CSV). Jamais modifiées."
-
-    meta:
-      external_location: "read_csv_auto('../data_brute/{name}.csv', all_varchar=true)"
+    
+    config:
+      meta:
+        external_location: "read_csv_auto('../data_brute/{name}.csv', all_varchar=true)"
 
     tables:
       - name: clients
@@ -20,18 +17,19 @@ sources:
 
       - name: commandes
         description: "Commandes passées. Pièges : id_client orphelins, dates en 2 formats, statuts en casse mixte."
-        # SURVEILLANCE DE FRAÎCHEUR : la table d'événements de référence.
-        # loaded_at_field = l'expression SQL qui donne l'horodatage de chaque
-        # ligne (nos dates brutes sont en 2 formats -> on parse les deux).
-        # dbt calcule max(expression) et compare l'écart avec maintenant :
-        #   < 12h -> PASS | 12-24h -> WARN | > 24h -> ERROR
-        loaded_at_field: "coalesce(try_cast(date_commande as timestamp), try_strptime(date_commande, '%d/%m/%Y %H:%M'))"
-        freshness:
-          warn_after: {count: 12, period: hour}
-          error_after: {count: 24, period: hour}
+        
+        # Structure exacte exigée par dbt v1.10+ / Fusion
+        config:
+          loaded_at_field: "coalesce(try_cast(date_commande as timestamp), try_strptime(date_commande, '%d/%m/%Y %H:%M'))"
+          freshness:
+            warn_after: {count: 12, period: hour}
+            error_after: {count: 24, period: hour}
 
       - name: lignes_commande
         description: "Détail produit par produit de chaque commande."
 
       - name: paiements
         description: "Paiements. Piège : doublons de paiement (retries) qui gonflent le CA."
+
+
+
