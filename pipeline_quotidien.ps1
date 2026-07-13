@@ -1,5 +1,5 @@
 # =========================================================================
-# PIPELINE QUOTIDIEN BOUTIQUE CI
+# PIPELINE QUOTIDIEN BOUTIQUE CI (Cible : PROD)
 # Enchaine : fraicheur des sources -> snapshots (historisation) -> build
 # Journalise tout dans logs\ et rend un code de sortie exploitable.
 # =========================================================================
@@ -19,17 +19,17 @@ Start-Transcript -Path $journal
 Set-Location (Join-Path $racine "shop_ci_dbt")
 
 # --- 1. Fraicheur des sources (informatif sur nos donnees fictives) ---
-& $dbt source freshness
+& $dbt source freshness --target prod
 $code_fraicheur = $LASTEXITCODE
 Write-Output ">>> Fraicheur : code $code_fraicheur"
 
 # --- 2. Snapshots : capturer l'historique AVANT de reconstruire ---
-& $dbt snapshot
+& $dbt snapshot --target prod
 $code_snapshot = $LASTEXITCODE
 Write-Output ">>> Snapshot : code $code_snapshot"
 
 # --- 3. Build : modeles + tous les tests ---
-& $dbt build
+& $dbt build --target prod
 $code_build = $LASTEXITCODE
 Write-Output ">>> Build : code $code_build"
 
