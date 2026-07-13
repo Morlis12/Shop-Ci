@@ -9,6 +9,10 @@ unit_tests:
       macros:
         is_incremental: true
     given:
+      # Ajout requis par dbt pour simuler la table incrémentale
+      - input: this
+        rows: []
+
       - input: ref('stg_lignes_commandes')
         rows:
           - {id_ligne: 1, id_commande: 10, id_produit: 7, quantite: 3}
