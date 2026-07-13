@@ -60,12 +60,15 @@ models:
     config:
       contract:
         enforced: true
+    time_spine:
+      standard_granularity_column: jour
     columns:
       - name: jour
         data_type: date
+        granularity: day
         tests: [unique, not_null]
       - name: annee
-        data_type: bigint          # extract() renvoie du BIGINT dans DuckDB !
+        data_type: bigint
       - name: numero_mois
         data_type: bigint
       - name: nom_mois
@@ -200,29 +203,4 @@ models:
       - name: date_commande_chargement
         data_type: timestamp
      
-  - name: dim_calendrier
-    description: "Dimension calendrier générée, un jour par ligne."
-    config:
-      contract:
-        enforced: true
-    time_spine:
-      standard_granularity_column: jour
-    columns:
-      - name: jour
-        data_type: date
-        granularity: day
-        tests: [unique, not_null]
-      - name: annee
-        data_type: bigint
-      - name: numero_mois
-        data_type: bigint
-      - name: nom_mois
-        data_type: varchar
-      - name: annee_mois
-        data_type: varchar
-      - name: numero_jour_semaine
-        data_type: bigint
-      - name: nom_jour
-        data_type: varchar
-      - name: est_weekend
-        data_type: boolean
+ 

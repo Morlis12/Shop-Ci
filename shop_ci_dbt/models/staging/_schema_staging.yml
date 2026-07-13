@@ -40,7 +40,7 @@ models:
       - name: canal
         tests: [not_null]
 
-  - name: stg_lignes_commande
+  - name: stg_lignes_commandes
     description: "Détail produit par produit de chaque commande."
     columns:
       - name: id_ligne
