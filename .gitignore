@@ -19,3 +19,6 @@ Audits/*.html
 .vscode/
 __pycache__/
 "@ | Out-File -Encoding utf8 .gitignore
+
+# Graphe OWL : regeneres a chaque execution
+shop_ci_dbt/owl/*.ttl

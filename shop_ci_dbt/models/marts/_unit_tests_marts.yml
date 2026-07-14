@@ -2,17 +2,16 @@ version: 2
 
 unit_tests:
 
+  # =====================================================================
+  # TEST 1 : Calculs, Règles Métier et Orphelins (Mode Initial / Full-Refresh)
+  # =====================================================================
   - name: ut_calcul_mesures_et_orphelins_fait_ventes
     description: "montant/coût/marge = quantité × tarifs produit. Un id_client sans correspondance doit être re-routé vers -1 (membre inconnu)."
     model: fait_ventes
     overrides:
       macros:
-        is_incremental: true
+        is_incremental: false # Fixé à false : aucun filtre WHERE incrémental ne s'applique ici
     given:
-      # Ajout requis par dbt pour simuler la table incrémentale
-      - input: this
-        rows: []
-
       - input: ref('stg_lignes_commandes')
         rows:
           - {id_ligne: 1, id_commande: 10, id_produit: 7, quantite: 3}
@@ -31,3 +30,35 @@ unit_tests:
       rows:
         - {id_ligne: 1, id_client: 5, montant_ligne: 3000, cout_ligne: 1800, marge_ligne: 1200}
         - {id_ligne: 2, id_client: -1, montant_ligne: 1000, cout_ligne: 600, marge_ligne: 400}
+
+  # =====================================================================
+  # TEST 2 : Validation du Filtre de la Fenêtre Glissante (Mode Incrémental)
+  # =====================================================================
+  - name: ut_filtre_incremental_fenetre_glissante
+    description: "Vérifie que seules les lignes de moins de 3 jours par rapport au max de la table existante (this) sont conservées."
+    model: fait_ventes
+    overrides:
+      macros:
+        is_incremental: true # Active le bloc WHERE incrémental du modèle SQL
+    given:
+      - input: this
+        rows:
+          - {jour_commande: "2024-03-10"} # MAX() = 2024-03-10. Seuil glissant (-3j) = 2024-03-07
+      - input: ref('stg_lignes_commandes')
+        rows:
+          - {id_ligne: 3, id_commande: 30, id_produit: 7, quantite: 1} # OK : Dans la fenêtre
+          - {id_ligne: 4, id_commande: 40, id_produit: 7, quantite: 1} # EXCLUE : Trop ancienne
+      - input: ref('stg_commandes')
+        rows:
+          - {id_commande: 30, id_client: 5, jour_commande: "2024-03-09", statut: "livree", canal: "site_web"}
+          - {id_commande: 40, id_client: 5, jour_commande: "2024-03-05", statut: "livree", canal: "site_web"}
+      - input: ref('stg_produits')
+        rows:
+          - {id_produit: 7, prix_unitaire: 1000, cout_unitaire: 600}
+      - input: ref('int_correspondance_clients')
+        rows:
+          - {id_client: 5, id_client_valide: 5}
+    expect:
+      rows:
+        - {id_ligne: 3, id_client: 5, montant_ligne: 1000, cout_ligne: 600, marge_ligne: 400}
+        # La ligne 4 n'est pas attendue ici car éliminée par la clause WHERE de ton modèle
