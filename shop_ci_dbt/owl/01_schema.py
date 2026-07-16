@@ -36,8 +36,7 @@ Client  = classe("Client",  label="Client Shop_CI",
     comment="Equivalent de mart_decision_clients. Grain : un client.")
 Produit = classe("Produit", label="Produit Shop_CI",
     comment="Equivalent de mart_decision_produits. Grain : un produit.")
-Vente = classe("Vente",
-    label="Evenement de vente",
+Vente = classe("Vente",label="Evenement de vente",
     comment="Equivalent d'une ligne de fait_ventes. Grain : un produit "
     "dans une commande. Relie un Client a un Produit via aAchete.")
 
@@ -47,11 +46,13 @@ data_prop("aNbCommandes", Client, XSD.integer, "Fréquence RFM.")
 data_prop("aJoursInactivite", Client, XSD.integer, "Récence RFM. NULL pour -1.")
 data_prop("aAncienneteJours", Client, XSD.integer, "Depuis inscription. NULL pour -1.")
 data_prop("aIdClient", Client, XSD.integer, "-1 = membre inconnu.")
+data_prop("aNomClient", Client, XSD.string, "dim_clients.nom_complet.")
 
 # --- PROPRIÉTÉS PRODUIT ---
 data_prop("aCaProduit", Produit, XSD.decimal, "CA officiel du produit.")
 data_prop("aTauxMarge", Produit, XSD.decimal, ">=45 fort, <35 faible.")
 data_prop("aQuantiteVendue", Produit, XSD.integer, "Volume.")
+data_prop("aNomProduit", Produit, XSD.string, "dim_produits.nom_produit.")
 
 # --- PROPRIÉTÉS VENTES ---
 data_prop("aMontantVente", Vente, XSD.decimal,

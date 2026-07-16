@@ -19,7 +19,7 @@ g.bind("shop", SHOP)
 
 # ---- CLIENTS ----
 clients = con.execute("""
-    SELECT id_client, nb_commandes, ca_total, jours_inactivite, anciennete_jours
+    SELECT id_client, nom_complet , nb_commandes, ca_total, jours_inactivite, anciennete_jours
     FROM mart_decision_clients
 """).fetchall()
 ccols = [d[0] for d in con.description]
@@ -31,6 +31,7 @@ for row in clients:
     g.add((uri, SHOP.aIdClient, Literal(int(d["id_client"]), datatype=XSD.integer)))
     g.add((uri, SHOP.aCaTotal, Literal(float(d["ca_total"]), datatype=XSD.decimal)))
     g.add((uri, SHOP.aNbCommandes, Literal(int(d["nb_commandes"]), datatype=XSD.integer)))
+    g.add((uri, SHOP.aNomClient, Literal(str(d["nom_complet"]), datatype=XSD.string)))
     # NULL (membre -1) -> on N'AJOUTE PAS le triplet, plutot qu'une valeur factice
     if d["jours_inactivite"] is not None:
         g.add((uri, SHOP.aJoursInactivite, Literal(int(d["jours_inactivite"]), datatype=XSD.integer)))
@@ -39,7 +40,7 @@ for row in clients:
 
 # ---- PRODUITS ----
 produits = con.execute("""
-    SELECT id_produit, ca_total, taux_marge_pct, quantite_vendue
+    SELECT id_produit, nom_produit, ca_total, taux_marge_pct, quantite_vendue
     FROM mart_decision_produits
 """).fetchall()
 pcols = [d[0] for d in con.description]
@@ -51,10 +52,11 @@ for row in produits:
     g.add((uri, SHOP.aCaProduit, Literal(float(d["ca_total"]), datatype=XSD.decimal)))
     g.add((uri, SHOP.aTauxMarge, Literal(float(d["taux_marge_pct"]), datatype=XSD.decimal)))
     g.add((uri, SHOP.aQuantiteVendue, Literal(int(d["quantite_vendue"]), datatype=XSD.integer)))
+    g.add((uri, SHOP.aNomProduit, Literal(str(d["nom_produit"]), datatype=XSD.string)))
 
 # ---- VENTES (relie Client <-> Produit via ObjectProperty) ----
 ventes = con.execute("""
-    SELECT id_ligne, id_client, id_produit, montant_ligne, jour_commande
+    SELECT id_ligne,id_client, id_produit, montant_ligne, jour_commande
     FROM fait_ventes
     WHERE statut NOT IN ('annulee', 'retournee')
 """).fetchall()

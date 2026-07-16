@@ -18,7 +18,7 @@ reference as (
 )
 select
     vc.id_client,
-    dc.nom_complet,
+    dc.nom_complet as nom_complet,
     dc.pays,
     dc.date_inscription,
     vc.nb_commandes,
