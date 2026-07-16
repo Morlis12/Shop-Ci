@@ -22,7 +22,7 @@ with ventes_produit as (
 
 select
     dp.id_produit,
-    dp.nom_produit,
+    dp.nom_produit as nom_produit,
     dp.categorie,
     dp.statut,
     coalesce(vp.quantite_vendue, 0)  as quantite_vendue,
