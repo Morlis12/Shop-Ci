@@ -43,15 +43,15 @@ unit_tests:
     given:
       - input: this
         rows:
-          - {jour_commande: "2024-03-10"} # MAX() = 2024-03-10. Seuil glissant (-3j) = 2024-03-07
+          - {date_commande_chargement: "2024-03-10"} # MAX() = 2024-03-10. Seuil glissant (-3j) = 2024-03-07
       - input: ref('stg_lignes_commandes')
         rows:
           - {id_ligne: 3, id_commande: 30, id_produit: 7, quantite: 1} # OK : Dans la fenêtre
           - {id_ligne: 4, id_commande: 40, id_produit: 7, quantite: 1} # EXCLUE : Trop ancienne
       - input: ref('stg_commandes')
         rows:
-          - {id_commande: 30, id_client: 5, jour_commande: "2024-03-09", statut: "livree", canal: "site_web"}
-          - {id_commande: 40, id_client: 5, jour_commande: "2024-03-05", statut: "livree", canal: "site_web"}
+          - {id_commande: 30, id_client: 5, date_commande: "2024-03-09 00:00:00", jour_commande: "2024-03-09", statut: "livree", canal: "site_web"}
+          - {id_commande: 40, id_client: 5, date_commande: "2024-03-05 00:00:00", jour_commande: "2024-03-05", statut: "livree", canal: "site_web"}
       - input: ref('stg_produits')
         rows:
           - {id_produit: 7, prix_unitaire: 1000, cout_unitaire: 600}
@@ -61,4 +61,4 @@ unit_tests:
     expect:
       rows:
         - {id_ligne: 3, id_client: 5, montant_ligne: 1000, cout_ligne: 600, marge_ligne: 400}
-        # La ligne 4 n'est pas attendue ici car éliminée par la clause WHERE de ton modèle
+        # La ligne 4 n'est pas attendue ici car éliminée par la clause WHERE de ton modèle.
