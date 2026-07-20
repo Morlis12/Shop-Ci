@@ -123,5 +123,7 @@ for entite, classe_mere, labels in [
     statut = "OK" if not anomalies else f"ANOMALIE : {len(anomalies)} entite(s)"
     print(f"  {entite:10} : {statut}")
 
-g.serialize(destination="shop_ci_classified.ttl", format="turtle")
+contenu = g.serialize(format="turtle")
+with open("shop_ci_classified.ttl", "w", encoding="utf-8") as f:
+    f.write(contenu)
 print(f"\nFichier final : {len(g)} triplets")

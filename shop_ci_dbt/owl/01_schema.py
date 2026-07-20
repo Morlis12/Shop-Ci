@@ -59,6 +59,7 @@ data_prop("aMontantVente", Vente, XSD.decimal,
     "fait_ventes.montant_ligne de cette vente precise.")
 data_prop("aDateVente", Vente, XSD.date,
     "fait_ventes.jour_commande de cette vente precise.")
+data_prop("aMargeVente", Vente, XSD.decimal, "marge_ligne de cette vente précise.")
 
 # ===========================================
 # CLASSE VENTE + OBJECTPROPERTY
