@@ -38,7 +38,12 @@ jobs:
                 threads: 4
           EOF
 
-      # 5. Construire et tester le projet
-      - name: dbt build
+      # 5. Construire d'abord TOUS les modèles (garantit que les tables existent)
+      - name: dbt run
         working-directory: shop_ci_dbt
-        run: dbt build
+        run: dbt run
+
+      # 6. Puis exécuter les tests (données ET unitaires), une fois les tables prêtes
+      - name: dbt test
+        working-directory: shop_ci_dbt
+        run: dbt test
