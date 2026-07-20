@@ -2,19 +2,19 @@ name: CI Shop_CI
 
 # QUAND ce workflow se déclenche-t-il ?
 on:
-  pull_request:        # à chaque Pull Request ouverte/mise à jour vers main
+  pull_request:
     branches: [main]
 
 jobs:
   build-and-test:
-    runs-on: ubuntu-latest   # la machine virtuelle prêtée par GitHub
+    runs-on: ubuntu-latest
 
     steps:
       # 1. Récupérer le code de la Pull Request
       - name: Récupérer le code
         uses: actions/checkout@v4
 
-      # 2. Installer Python (comme sur ton PC, mais depuis zéro)
+      # 2. Installer Python
       - name: Installer Python
         uses: actions/setup-python@v5
         with:
@@ -24,7 +24,7 @@ jobs:
       - name: Installer les dépendances
         run: pip install -r shop_ci_dbt/requirements.txt
 
-      # 4. Créer le profil de connexion (voir explication plus bas)
+      # 4. Créer le profil de connexion
       - name: Configurer le profil dbt
         run: |
           mkdir -p ~/.dbt
@@ -47,3 +47,15 @@ jobs:
       - name: dbt test
         working-directory: shop_ci_dbt
         run: dbt test
+
+      # 7. Installer les dépendances du graphe
+      - name: Installer rdflib
+        run: pip install rdflib
+
+      # 8. Générer et classifier le graphe
+      - name: Générer le graphe de connaissances
+        working-directory: shop_ci_dbt/owl
+        run: |
+          python 01_schema.py
+          python 02_export.py
+          python 03_classify.py

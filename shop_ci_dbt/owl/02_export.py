@@ -11,7 +11,7 @@ import duckdb, os
 from rdflib import Graph, Namespace, RDF, XSD, Literal
 
 SHOP = Namespace("http://shop-ci.ci/ontologie#")
-DB_PATH = r"C:\Users\Laptop Studio\Documents\Shop Ci\shop_ci_dbt\dev.duckdb"  # ton chemin
+DB_PATH = DB_PATH = "../dev.duckdb"
 
 con = duckdb.connect(DB_PATH, read_only=True)
 
