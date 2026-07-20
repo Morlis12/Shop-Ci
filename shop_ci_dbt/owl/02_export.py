@@ -14,6 +14,7 @@ SHOP = Namespace("http://shop-ci.ci/ontologie#")
 DB_PATH = r"C:\Users\Laptop Studio\Documents\Shop Ci\shop_ci_dbt\dev.duckdb"  # ton chemin
 
 con = duckdb.connect(DB_PATH, read_only=True)
+
 g = Graph()
 g.bind("shop", SHOP)
 
@@ -56,7 +57,7 @@ for row in produits:
 
 # ---- VENTES (relie Client <-> Produit via ObjectProperty) ----
 ventes = con.execute("""
-    SELECT id_ligne,id_client, id_produit, montant_ligne, jour_commande
+    SELECT id_ligne, id_client, id_produit, montant_ligne, marge_ligne, jour_commande
     FROM fait_ventes
     WHERE statut NOT IN ('annulee', 'retournee')
 """).fetchall()
@@ -70,7 +71,10 @@ for row in ventes:
     g.add((uri, SHOP.aDateVente, Literal(str(d["jour_commande"]), datatype=XSD.date)))
     g.add((uri, SHOP.aPourClient, SHOP[f"client_{d['id_client']}"]))
     g.add((uri, SHOP.aPourProduit, SHOP[f"produit_{d['id_produit']}"]))
+    g.add((uri, SHOP.aMargeVente, Literal(float(d["marge_ligne"]), datatype=XSD.decimal)))
 
 con.close()
-g.serialize(destination="shop_ci_data.ttl", format="turtle")
+contenu = g.serialize(format="turtle")
+with open("shop_ci_data.ttl", "w", encoding="utf-8") as f:
+    f.write(contenu)
 print(f"Donnees exportees : {len(g)} triplets total")
