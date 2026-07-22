@@ -22,3 +22,7 @@ __pycache__/
 
 # Graphe OWL : regeneres a chaque execution
 shop_ci_dbt/owl/*.ttl
+
+# Power BI
+**/.pbi/
+**/cache.abf

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/gitIntegration/platformProperties/2.0.0/schema.json",
+  "metadata": {
+    "type": "Report",
+    "displayName": "Dash_ShopCi"
+  },
+  "config": {
+    "version": "2.0",
+    "logicalId": "c0a5003c-dc8e-4232-a908-98c5d1ca512e"
+  }
+}
