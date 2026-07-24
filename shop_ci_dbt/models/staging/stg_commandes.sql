@@ -8,22 +8,22 @@ cleaned_data as (
 
     select
         -- 1. conservation des valeurs brutes en texte pour les tests de missing
-        cast(id_commande as varchar) as raw_id_commande,
-        cast(id_client as varchar) as raw_id_client,
-        cast(date_commande as varchar) as raw_date_commande,
-        cast(statut as varchar) as raw_statut,
-        cast(canal as varchar) as raw_canal,
+        cast(id_commande as {{ dbt.type_string() }}) as raw_id_commande,
+        cast(id_client as {{ dbt.type_string() }}) as raw_id_client,
+        cast(date_commande as {{ dbt.type_string() }}) as raw_date_commande,
+        cast(statut as {{ dbt.type_string() }}) as raw_statut,
+        cast(canal as {{ dbt.type_string() }}) as raw_canal,
 
         -- 2. conservation et typage des identifiants pour la selection finale
-        try_cast(id_commande as integer) as id_commande,
-        try_cast(id_client as integer) as id_client,
+        {{ dbt.safe_cast("id_commande", dbt.type_int()) }} as id_commande,
+        {{ dbt.safe_cast("id_client", dbt.type_int()) }} as id_client,
 
-        -- 3. typage et normalisation de la date en timestamp via maacro (pour faciliter la maintenance si on veut changer le format de date)
-{{ nettoyer_date('date_commande') }} as date_commande,
+        -- 3. typage et normalisation de la date en timestamp via macro
+        {{ nettoyer_date('date_commande') }} as date_commande,
 
         -- 4. normalisation des statuts et canaux
-        lower(trim(cast(statut as varchar))) as statut,
-        lower(trim(cast(canal as varchar))) as canal
+        lower(trim(cast(statut as {{ dbt.type_string() }}))) as statut,
+        lower(trim(cast(canal as {{ dbt.type_string() }}))) as canal
 
     from source_data
 

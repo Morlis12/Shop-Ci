@@ -3,10 +3,8 @@ version: 2
 sources:
   - name: source_brut
     description: "Données brutes de BoutiqueCI, exportées telles quelles des systèmes sources (CSV). Jamais modifiées."
-    
-    config:
-      meta:
-        external_location: "read_csv_auto('../data_brute/{name}.csv', all_varchar=true)"
+    database: shop-503309  # Ton identifiant de projet BigQuery validé
+    schema: shop_ci        # Le dataset créé par ton script Python
 
     tables:
       - name: clients
@@ -18,12 +16,12 @@ sources:
       - name: commandes
         description: "Commandes passées. Pièges : id_client orphelins, dates en 2 formats, statuts en casse mixte."
         
-        # Structure exacte exigée par dbt v1.10+ / Fusion
-        config:
-          loaded_at_field: "coalesce(try_cast(date_commande as timestamp), try_strptime(date_commande, '%d/%m/%Y %H:%M'))"
-          freshness:
-            warn_after: {count: 12, period: hour}
-            error_after: {count: 24, period: hour}
+        # Structure de fraîcheur adaptée pour BigQuery
+        # Parse la chaîne STRING en TIMESTAMP en testant le format ISO d'abord, sinon le format FR
+        loaded_at_field: "COALESCE(SAFE.PARSE_TIMESTAMP('%Y-%m-%d %H:%M:%S', date_commande), SAFE.PARSE_TIMESTAMP('%d/%m/%Y %H:%M:%S', date_commande))"
+        freshness:
+          warn_after: {count: 12, period: hour}
+          error_after: {count: 24, period: hour}
 
       - name: lignes_commande
         description: "Détail produit par produit de chaque commande."

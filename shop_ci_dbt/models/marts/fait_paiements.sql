@@ -46,7 +46,8 @@ inner join commandes c        on p.id_commande = c.id_commande
 left join correspondance corr on c.id_client   = corr.id_client
 
 {% if is_incremental() %}
-where date_commande_chargement > (
-    select max(date_commande_chargement) - interval 3 day from {{ this }}
+-- En mode incrémental : On force le résultat du calcul en TIMESTAMP pour BigQuery
+where c.date_commande > (
+    select cast({{ dbt.dateadd(datepart='day', interval=-3, from_date_or_timestamp='max(date_commande_chargement)') }} as timestamp) from {{ this }}
 )
 {% endif %}

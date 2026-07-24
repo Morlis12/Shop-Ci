@@ -7,16 +7,14 @@ unit_tests:
     model: stg_commandes
     given:
       - input: source('source_brut', 'commandes')
-        format: sql
-        rows: |
-          select '1' as id_commande, '10' as id_client, '2024-01-25 15:30:00' as date_commande, 'livree' as statut, 'site_web' as canal
-          union all
-          select '2', '11', '17/05/2023 09:15', 'LIVREE', 'appli_mobile'
-          union all
-          select '3', '12', '04-18-2024', 'annulee', 'whatsapp'
-          union all
-          select '4', '13', '25 janvier 2024', 'expediee', 'site_web'
+        format: dict  # Migration vers le format natif dbt agnostique
+        rows:
+          - {id_commande: "1", id_client: "10", date_commande: "2024-01-25 15:30:00", statut: "livree", canal: "site_web"}
+          - {id_commande: "2", id_client: "11", date_commande: "17/05/2023 09:15", statut: "LIVREE", canal: "appli_mobile"}
+          - {id_commande: "3", id_client: "12", date_commande: "04-18-2024", statut: "annulee", canal: "whatsapp"}
+          - {id_commande: "4", id_client: "13", date_commande: "25 janvier 2024", statut: "expediee", canal: "site_web"}
     expect:
+      format: dict
       rows:
         - {id_commande: 1, date_commande: "2024-01-25 15:30:00", statut: "livree"}
         - {id_commande: 2, date_commande: "2023-05-17 09:15:00", statut: "livree"}
@@ -28,16 +26,14 @@ unit_tests:
     model: stg_paiements
     given:
       - input: source('source_brut', 'paiements')
-        format: sql
-        rows: |
-          select '1' as id_paiement, '100' as id_commande, '5000' as montant, 'mobile_money' as methode, 'reussi' as statut_paiement
-          union all
-          select '2', '100', '5000', 'mobile_money', 'reussi'
-          union all
-          select '3', '200', '8000', 'carte_bancaire', 'echoue'
-          union all
-          select '4', '200', '8000', 'Mobile Money', 'reussi'
+        format: dict  # Remplacement des "union all" SQL problématiques sur le cloud
+        rows:
+          - {id_paiement: "1", id_commande: "100", montant: "5000", methode: "mobile_money", statut_paiement: "reussi"}
+          - {id_paiement: "2", id_commande: "100", montant: "5000", methode: "mobile_money", statut_paiement: "reussi"}
+          - {id_paiement: "3", id_commande: "200", montant: "8000", methode: "carte_bancaire", statut_paiement: "echoue"}
+          - {id_paiement: "4", id_commande: "200", montant: "8000", methode: "Mobile Money", statut_paiement: "reussi"}
     expect:
+      format: dict
       rows:
         - {id_paiement: 1, est_reussi: 1, est_doublon: 0, methode: "mobile_money"}
         - {id_paiement: 2, est_reussi: 1, est_doublon: 1, methode: "mobile_money"}

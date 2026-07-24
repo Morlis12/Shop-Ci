@@ -7,19 +7,21 @@ with source_data as (
 cleaned_data as (
 
     select
-        -- On force la conversion en texte (varchar) pour la compatibilité avec trim/lower
-        cast(id_paiement as varchar) as raw_id_paiement,
-        cast(id_commande as varchar) as raw_id_commande,
-        cast(montant as varchar) as raw_montant,
-        cast(methode as varchar) as raw_methode,
-        cast(statut_paiement as varchar) as raw_statut_paiement,
+        -- 1. Conversion portable en texte (STRING sur BigQuery / VARCHAR sur DuckDB)
+        cast(id_paiement as {{ dbt.type_string() }}) as raw_id_paiement,
+        cast(id_commande as {{ dbt.type_string() }}) as raw_id_commande,
+        cast(montant as {{ dbt.type_string() }}) as raw_montant,
+        cast(methode as {{ dbt.type_string() }}) as raw_methode,
+        cast(statut_paiement as {{ dbt.type_string() }}) as raw_statut_paiement,
 
-        -- typage et nettoyage final des colonnes
-        try_cast(id_paiement as integer) as id_paiement,
-        try_cast(id_commande as integer) as id_commande,
-        try_cast(montant as integer) as montant,
-        replace(lower(trim(cast(methode as varchar))), ' ', '_') as methode,
-        lower(trim(cast(statut_paiement as varchar))) as statut_paiement
+        -- 2. Typage numérique portable sécurisé (Remplace try_cast)
+        {{ dbt.safe_cast("id_paiement", dbt.type_int()) }} as id_paiement,
+        {{ dbt.safe_cast("id_commande", dbt.type_int()) }} as id_commande,
+        {{ dbt.safe_cast("montant", dbt.type_int()) }} as montant,
+        
+        -- 3. Nettoyage et normalisation du texte
+        replace(lower(trim(cast(methode as {{ dbt.type_string() }}))), ' ', '_') as methode,
+        lower(trim(cast(statut_paiement as {{ dbt.type_string() }}))) as statut_paiement
 
     from source_data
 
@@ -44,13 +46,13 @@ select
     methode,
     statut_paiement,
 
-    -- flags metiers preexistants
+    -- Flags métiers préexistants
     case when statut_paiement = 'reussi' then 1 else 0 end as est_reussi,
     case when statut_paiement = 'reussi' and rang_dans_statut = 1 then 1 else 0 end as vrai_reussi,
     case when statut_paiement = 'reussi' and rang_dans_statut > 1 then 1 else 0 end as est_doublon,
 
     -- =========================================================================
-    -- section des flags de valeurs manquantes (missing) pour toutes les colonnes
+    -- Section sécurisée des flags is_missing pour toutes les colonnes
     -- =========================================================================
     case 
         when raw_id_paiement is null or trim(raw_id_paiement) = '' or lower(trim(raw_id_paiement)) = 'nan' then true

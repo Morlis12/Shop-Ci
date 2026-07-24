@@ -26,3 +26,7 @@ shop_ci_dbt/owl/*.ttl
 # Power BI
 **/.pbi/
 **/cache.abf
+
+# Fichiers secrets GCP (Correction stricte)
+.secrets.json
+**/.secrets.json

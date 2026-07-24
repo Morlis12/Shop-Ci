@@ -8,20 +8,23 @@ cleaned_data as (
 
     select
         -- 1. conversion en texte pour les tests de missing
-        cast(id_produit as varchar) as raw_id_produit,
-        cast(nom_produit as varchar) as raw_nom_produit,
-        cast(prix_unitaire as varchar) as raw_prix_unitaire,
-        cast(cout_unitaire as varchar) as raw_cout_unitaire,
-        cast(categorie as varchar) as raw_categorie,
-        cast(statut as varchar) as raw_statut,
+        cast(id_produit as {{ dbt.type_string() }}) as raw_id_produit,
+        cast(nom_produit as {{ dbt.type_string() }}) as raw_nom_produit,
+        cast(prix_unitaire as {{ dbt.type_string() }}) as raw_prix_unitaire,
+        cast(cout_unitaire as {{ dbt.type_string() }}) as raw_cout_unitaire,
+        cast(categorie as {{ dbt.type_string() }}) as raw_categorie,
+        cast(statut as {{ dbt.type_string() }}) as raw_statut,
 
-        -- 2. typage et nettoyage metier (securise avec cast as varchar)
-        try_cast(id_produit as integer) as id_produit,
-        trim(cast(nom_produit as varchar)) as nom_produit,
-        nullif(trim(cast(categorie as varchar)), '') as categorie,
-        try_cast(split_part(trim(cast(prix_unitaire as varchar)), ' ', 1) as integer) as prix_unitaire,
-        try_cast(split_part(trim(cast(cout_unitaire as varchar)), ' ', 1) as integer) as cout_unitaire,
-        lower(trim(cast(statut as varchar))) as statut
+        -- 2. typage et nettoyage metier (securise et portable)
+        {{ dbt.safe_cast("id_produit", dbt.type_int()) }} as id_produit,
+        trim(cast(nom_produit as {{ dbt.type_string() }})) as nom_produit,
+        nullif(trim(cast(categorie as {{ dbt.type_string() }})), '') as categorie,
+        
+        -- Extraction portable de la première partie avant l'espace (pour nettoyer le suffixe XOF) et safe_cast
+        {{ dbt.safe_cast(dbt.split_part("trim(cast(prix_unitaire as " ~ dbt.type_string() ~ "))", "' '", 1), dbt.type_int()) }} as prix_unitaire,
+        {{ dbt.safe_cast(dbt.split_part("trim(cast(cout_unitaire as " ~ dbt.type_string() ~ "))", "' '", 1), dbt.type_int()) }} as cout_unitaire,
+        
+        lower(trim(cast(statut as {{ dbt.type_string() }}))) as statut
 
     from source_data
 

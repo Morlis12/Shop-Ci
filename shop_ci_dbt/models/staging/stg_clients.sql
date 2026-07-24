@@ -7,36 +7,35 @@ with source_data as (
 cleaned_data as (
 
     select
-        -- 1. force la conversion en texte (varchar) pour la compatibilité avec trim/lower dans les tests de missing
-        cast(id_client as varchar) as raw_id_client,
-        cast(email as varchar) as raw_email,
-        cast(prenom as varchar) as raw_prenom,
-        cast(nom as varchar) as raw_nom,
-        cast(ville as varchar) as raw_ville,
-        cast(pays as varchar) as raw_pays,
-        cast(date_inscription as varchar) as raw_date_inscription,
-        cast(telephone as varchar) as raw_telephone,
+        cast(id_client as {{ dbt.type_string() }}) as raw_id_client,
+        cast(email as {{ dbt.type_string() }}) as raw_email,
+        cast(prenom as {{ dbt.type_string() }}) as raw_prenom,
+        cast(nom as {{ dbt.type_string() }}) as raw_nom,
+        cast(ville as {{ dbt.type_string() }}) as raw_ville,
+        cast(pays as {{ dbt.type_string() }}) as raw_pays,
+        cast(date_inscription as {{ dbt.type_string() }}) as raw_date_inscription,
+        cast(telephone as {{ dbt.type_string() }}) as raw_telephone,
 
-        -- 2. typage, conversion et nettoyage sécurisé des données
-        try_cast(id_client as integer) as id_client,
-        trim(lower(cast(email as varchar))) as email,
-        upper(substr(trim(cast(prenom as varchar)), 1, 1)) || lower(substr(trim(cast(prenom as varchar)), 2)) as prenom,
-        upper(trim(cast(nom as varchar))) as nom,
-        lower(trim(cast(ville as varchar))) as ville,
+        {{ dbt.safe_cast("id_client", dbt.type_int()) }} as id_client,
+        trim(lower(cast(email as {{ dbt.type_string() }}))) as email,
+        
+        concat(upper(substr(trim(cast(prenom as {{ dbt.type_string() }})), 1, 1)), lower(substr(trim(cast(prenom as {{ dbt.type_string() }})), 2))) as prenom,
+        
+        upper(trim(cast(nom as {{ dbt.type_string() }}))) as nom,
+        lower(trim(cast(ville as {{ dbt.type_string() }}))) as ville,
 
-        -- 3. normalisation des pays sécurisée
+        -- Utilisation des guillemets doubles pour sécuriser les apostrophes
         case
-            when lower(trim(cast(pays as varchar))) in ('ci', 'cote d''ivoire', 'côte d''ivoire') then 'Côte d''Ivoire'
-            when lower(trim(cast(pays  as varchar))) in ('sn', 'senegal', 'sénégal') then 'Sénégal'
-            when lower(trim(cast(pays as varchar))) in ('fr', 'france') then 'France'
-            when lower(trim(cast(pays as varchar))) in ('ml', 'mali') then 'Mali'
-            else trim(cast(pays as varchar))
+            when lower(trim(cast(pays as {{ dbt.type_string() }}))) in ("ci", "cote d'ivoire", "côte d'ivoire") then "Côte d'Ivoire"
+            when lower(trim(cast(pays as {{ dbt.type_string() }}))) in ("sn", "senegal", "sénégal") then "Sénégal"
+            when lower(trim(cast(pays as {{ dbt.type_string() }}))) in ("fr", "france") then "France"
+            when lower(trim(cast(pays as {{ dbt.type_string() }}))) in ("ml", "mali") then "Mali"
+            else trim(cast(pays as {{ dbt.type_string() }}))
         end as pays,
 
-        -- 4. standardisation de la date d'inscription via une macro (pour faciliter la maintenance si on veut changer le format de date)
-cast({{ nettoyer_date('date_inscription') }} as date) as date_inscription,
+        cast({{ nettoyer_date('date_inscription') }} as date) as date_inscription,
 
-        nullif(trim(cast(telephone as varchar)), '') as telephone
+        nullif(trim(cast(telephone as {{ dbt.type_string() }})), '') as telephone
 
     from source_data
 
@@ -59,15 +58,12 @@ select
     email,
     prenom,
     nom,
-    prenom || ' ' || nom as nom_complet,
+    concat(prenom, ' ', nom) as nom_complet,
     ville,
     pays,
     date_inscription,
     telephone,
 
-    -- =========================================================================
-    -- section sécurisée des flags is_missing pour toutes les colonnes
-    -- =========================================================================
     case 
         when raw_id_client is null or trim(raw_id_client) = '' or lower(trim(raw_id_client)) = 'nan' then true
         else false
@@ -110,4 +106,3 @@ select
 
 from deduplicated
 where rang = 1
-

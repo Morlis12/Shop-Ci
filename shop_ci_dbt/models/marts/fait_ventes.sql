@@ -1,4 +1,3 @@
-
 {{
     config(
         materialized='incremental',
@@ -9,8 +8,6 @@
 
 -- Table de faits VENTES.
 -- GRAIN DÉCLARÉ : une ligne = UN PRODUIT dans UNE COMMANDE (ligne de commande).
--- Toute mesure de cette table est vraie à ce grain (pas de montant de paiement
--- ici : grain commande != grain ligne -> il vit dans fait_paiements).
 with lignes as (
 
     select * from {{ ref('stg_lignes_commandes') }}
@@ -45,7 +42,8 @@ select
     l.id_produit,
     c.jour_commande,
     c.date_commande                         as date_commande_chargement,
-    -- Dimensions dégénérées (attributs de l'événement, sans table dédiée)
+    
+    -- Dimensions dégénérées
     c.statut,
     c.canal,
 
@@ -61,9 +59,8 @@ inner join produits p         on l.id_produit  = p.id_produit
 left join correspondance corr on c.id_client   = corr.id_client
 
 {% if is_incremental() %}
--- En mode incrémental : ne traiter que les commandes plus récentes que
--- le maximum déjà chargé, avec 3 jours de marge pour les retardataires.
-where date_commande_chargement > (
-    select max(date_commande_chargement) - interval 3 day from {{ this }}
+-- En mode incrémental : On force le résultat du calcul en TIMESTAMP pour BigQuery
+where c.date_commande > (
+    select cast({{ dbt.dateadd(datepart='day', interval=-3, from_date_or_timestamp='max(date_commande_chargement)') }} as timestamp) from {{ this }}
 )
 {% endif %}
