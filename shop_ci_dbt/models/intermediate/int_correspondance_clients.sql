@@ -5,15 +5,18 @@
 with clients_bruts as (
 
     select
-        cast(id_client as integer) as id_client,
-        trim(lower(email)) as email
+        -- Typage numérique portable sécurisé (Remplace cast(as integer))
+        {{ dbt.safe_cast("id_client", dbt.type_int()) }} as id_client,
+        trim(lower(cast(email as {{ dbt.type_string() }}))) as email
     from {{ source('source_brut', 'clients') }}
 
 ),
 
 survivants as (
 
-    select id_client as id_client_valide, email
+    select 
+        id_client as id_client_valide, 
+        email
     from {{ ref('stg_clients') }}
 
 )

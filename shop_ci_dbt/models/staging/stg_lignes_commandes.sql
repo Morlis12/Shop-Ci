@@ -1,6 +1,6 @@
 with source_data as (
 
-    select * from {{ source('source_brut', 'lignes_commande') }}
+    select *from {{ source('source_brut', 'lignes_commande') }}
 
 ),
 

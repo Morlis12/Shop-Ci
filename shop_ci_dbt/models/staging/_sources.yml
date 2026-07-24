@@ -3,31 +3,20 @@ version: 2
 sources:
   - name: source_brut
     description: "Données brutes de BoutiqueCI, exportées telles quelles des systèmes sources (CSV). Jamais modifiées."
-    database: shop-503309  # Ton identifiant de projet BigQuery validé
-    schema: shop_ci        # Le dataset créé par ton script Python
-
+    database: "shop-503309"
+    schema: shop_ci
     tables:
       - name: clients
         description: "Clients inscrits. Pièges : doublons (même email, ids différents), casse incohérente, 3 formats de dates, pays non normalisés."
-
       - name: produits
         description: "Catalogue produits. Piège : prix parfois stockés en texte avec suffixe XOF, catégories manquantes."
-
       - name: commandes
         description: "Commandes passées. Pièges : id_client orphelins, dates en 2 formats, statuts en casse mixte."
-        
-        # Structure de fraîcheur adaptée pour BigQuery
-        # Parse la chaîne STRING en TIMESTAMP en testant le format ISO d'abord, sinon le format FR
         loaded_at_field: "COALESCE(SAFE.PARSE_TIMESTAMP('%Y-%m-%d %H:%M:%S', date_commande), SAFE.PARSE_TIMESTAMP('%d/%m/%Y %H:%M:%S', date_commande))"
         freshness:
           warn_after: {count: 12, period: hour}
           error_after: {count: 24, period: hour}
-
       - name: lignes_commande
         description: "Détail produit par produit de chaque commande."
-
       - name: paiements
         description: "Paiements. Piège : doublons de paiement (retries) qui gonflent le CA."
-
-
-

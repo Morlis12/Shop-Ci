@@ -20,42 +20,35 @@ jobs:
         with:
           python-version: '3.12'
 
-      # 3. Installer les dépendances (dbt, duckdb...)
+      # 3. Installer les dépendances
       - name: Installer les dépendances
         run: pip install -r requirements.txt
 
-      # 4. Créer le profil de connexion
+      # 4. Configurer le profil dbt pour BigQuery
       - name: Configurer le profil dbt
         run: |
           mkdir -p ~/.dbt
+          echo '${{ secrets.GCP_SA_KEY }}' > /tmp/gcp-key.json
           cat > ~/.dbt/profiles.yml << EOF
           shop_ci_dbt:
-            target: dev
+            target: bigquery_dev
             outputs:
-              dev:
-                type: duckdb
-                path: dev.duckdb
+              bigquery_dev:
+                type: bigquery
+                method: service-account
+                project: shop-503309
+                dataset: shop_ci_dev
                 threads: 4
+                keyfile: /tmp/gcp-key.json
+                location: US
           EOF
 
-      # 5. Construire d'abord TOUS les modèles
-      - name: dbt run
+      # 5. Construire et tester (full-refresh, snapshots exclus --
+      #    contrainte du palier gratuit BigQuery sans carte bancaire, sans DML/MERGE)
+      - name: dbt build
         working-directory: shop_ci_dbt
-        run: dbt run
+        run: dbt build --target bigquery_dev --full-refresh --no-partial-parse --exclude path:snapshots
 
-      # 6. Puis exécuter les tests (données ET unitaires) une fois les tables prêtes
-      - name: dbt test
-        working-directory: shop_ci_dbt
-        run: dbt test
-
-      # 7. Installer les dépendances du graphe
-      - name: Installer rdflib
-        run: pip install rdflib
-
-      # 8. Générer et classifier le graphe
-      - name: Générer le graphe de connaissances
-        working-directory: shop_ci_dbt/owl
-        run: |
-          python 01_schema.py
-          python 02_export.py
-          python 03_classify.py
+      # NOTE : la génération du graphe (owl/) reste temporairement hors CI --
+      # elle dépend encore de dev.duckdb en local, non disponible sur cette cible BigQuery.
+      # Limitation documentée dans README.md, section 6.
