@@ -1,6 +1,5 @@
 name: CI Shop_CI
 
-# QUAND ce workflow se déclenche-t-il ?
 on:
   pull_request:
     branches: [main]
@@ -49,6 +48,16 @@ jobs:
         working-directory: shop_ci_dbt
         run: dbt build --target bigquery_dev --full-refresh --no-partial-parse --exclude path:snapshots
 
-      # NOTE : la génération du graphe (owl/) reste temporairement hors CI --
-      # elle dépend encore de dev.duckdb en local, non disponible sur cette cible BigQuery.
-      # Limitation documentée dans README.md, section 6.
+      # 6. Placer la clé de service là où les scripts owl/ l'attendent
+      #    (CLE_JSON = "../.secrets/..." relatif à owl/, donc shop_ci_dbt/.secrets/)
+      - name: Préparer la clé pour les scripts du graphe
+        run: cp /tmp/gcp-key.json .secrets.json
+
+      # 7. Générer et classifier le graphe de connaissances
+      - name: Générer le graphe de connaissances
+        working-directory: shop_ci_dbt/owl
+        run: |
+          python 01_schema.py
+          python 02_export.py
+          python 03_classify.py
+          python 04_ecrire_labels_BigQuery.py
