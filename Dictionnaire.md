@@ -1,3 +1,4 @@
+Dictionnaire · MD
 # Dictionnaire — Shop_CI
  
 Glossaire des termes techniques employés dans le projet, organisé par domaine. Document vivant, complété au fil des chantiers.
@@ -18,13 +19,37 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
  
 **Membre inconnu (Unknown Member)** — Convention Kimball : une ligne spéciale dans une dimension (id = -1) qui accueille les faits dont la clé étrangère est orpheline.
  
-**Mock (simulacre)** — Donnée factice fabriquée pour remplacer une vraie source le temps d'un test, contenant uniquement les colonnes réellement lues par le code testé — ni plus, ni moins.
+**Mock (simulacre)** — Donnée factice fabriquée pour remplacer une vraie source le temps d'un test, contenant uniquement les colonnes réellement lues par le code testé.
  
 **Contrat de modèle (`contract: enforced`)** — Verrouillage du nom, du type et du nombre de colonnes d'un modèle avant sa matérialisation.
  
 **Snapshot** — Objet dbt à mémoire, historisant les changements d'une table source selon le pattern SCD Type 2, insert-only.
  
 **Modèle incrémental** — Matérialisation qui ne retraite que les nouvelles lignes à chaque exécution, avec une clé unique pour gérer les mises à jour (upsert).
+ 
+---
+ 
+## Portabilité multi-warehouse (DuckDB ↔ BigQuery)
+ 
+**Macro cross-database** — Fonction Jinja fournie par dbt-core (namespace `dbt.`) qui se traduit automatiquement dans le bon dialecte SQL selon la cible active — un seul code source, un comportement correct sur plusieurs moteurs.
+ 
+**`dbt.type_string()` / `dbt.type_int()`** — Types de données universels : se traduisent en `varchar`/`integer` sur DuckDB, `STRING`/`INT64` sur BigQuery.
+ 
+**`dbt.safe_cast(valeur, type)`** — Conversion de type tolérante aux erreurs, portable, équivalent cross-database de `try_cast`.
+ 
+**`dbt.split_part()` / `dbt.dateadd()`** — Fonctions de manipulation de texte/date universelles, évitant d'appeler une fonction propre à un seul moteur.
+ 
+**Routage conditionnel Jinja (`{% if target.type == '...' %}`)** — Bascule entre deux implémentations natives dans le même fichier, utilisé quand aucune macro cross-database générique n'existe pour un cas précis (ex : génération de calendrier).
+ 
+**Limite du parsing YAML** — L'objet Jinja `dbt` (et ses macros) n'existe qu'au moment de la compilation SQL, pas au moment du parsing des fichiers de contrat (`schema.yml`) — d'où l'usage de types SQL standards en dur (`int64`, `string`) dans les contrats plutôt que de macros.
+ 
+**Ordre d'exécution SQL strict (BigQuery)** — Contrairement à DuckDB, BigQuery interdit de filtrer un `WHERE` sur un alias défini dans le même `SELECT` — il faut filtrer sur la colonne source réelle.
+ 
+**`generate_schema_name`** — Macro surchargeable qui détermine le schéma cible réel d'un modèle selon la cible active (`target.name`), garantissant l'isolation entre dev et prod sur un même warehouse.
+ 
+**Ingestion CSV → cloud (`charger_csv_bigquery.py`)** — Script maison dans l'esprit d'un outil d'ingestion (type Fivetran) : lit les CSV locaux, force toutes les colonnes en `STRING`, pousse physiquement les données comme tables dans le dataset cloud — nécessaire car un warehouse cloud n'a pas de notion de "fichier local à lire à la volée".
+ 
+**Palier gratuit BigQuery (sandbox)** — Mode sans carte bancaire interdisant les requêtes DML/MERGE, bloquant nativement les modèles incrémentaux et les snapshots — contrainte temporaire d'environnement, pas une limite du code.
  
 ---
  
@@ -46,9 +71,9 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
  
 **ObjectProperty** — Relation qui relie un individu à un autre individu, permettant les traversées à plusieurs sauts (ex. : Client → Vente → Produit).
  
-**SPARQL SELECT / CONSTRUCT** — SELECT interroge et affiche ; CONSTRUCT fabrique de nouveaux triplets à partir d'un motif trouvé — le mécanisme d'inférence utilisé pour la classification.
+**SPARQL SELECT / CONSTRUCT** — SELECT interroge et affiche ; CONSTRUCT fabrique de nouveaux triplets à partir d'un motif trouvé.
  
-**FILTER NOT EXISTS** — Exclut les résultats pour lesquels un motif secondaire existe déjà — utilisé pour la cascade de priorité des règles de classification (équivalent d'un `CASE WHEN`).
+**FILTER NOT EXISTS** — Exclut les résultats pour lesquels un motif secondaire existe déjà — cascade de priorité des règles de classification.
  
 **Chemin de propriété (`+`, `*`, `/`, `|`)** — Rendent une relation transitive, chaînée, ou alternative sans réécrire plusieurs triplets.
  
@@ -58,13 +83,13 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
  
 ## Serveur MCP (Model Context Protocol)
  
-**MCP** — Protocole standard permettant à un agent IA d'appeler des outils externes exposés par un serveur local ou distant — conçu pour un raisonnement conversationnel, pas comme une API REST générique.
+**MCP** — Protocole standard permettant à un agent IA d'appeler des outils externes exposés par un serveur local ou distant.
  
-**Outil (`@mcp.tool()`)** — Fonction Python transformée en capacité appelable par l'agent IA ; sa docstring sert de description à l'IA pour savoir quand l'utiliser.
+**Outil (`@mcp.tool()`)** — Fonction Python transformée en capacité appelable par l'agent IA ; sa docstring sert de description à l'IA.
  
 **Rechargement à la demande** — Pattern consistant à relire une source de données à chaque appel d'outil plutôt qu'une seule fois au démarrage.
  
-**Sandboxing / AppContainer** — Mécanisme d'isolation Windows restreignant certaines opérations système (création de processus enfants) pour des raisons de sécurité.
+**Sandboxing / AppContainer** — Mécanisme d'isolation Windows restreignant certaines opérations système pour des raisons de sécurité.
  
 ---
  
@@ -74,44 +99,38 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
  
 **Reproduire avant de blâmer** — Reproduire manuellement le comportement d'un outil externe complexe avant de l'accuser d'un dysfonctionnement.
  
-**Environnement neuf comme révélateur** — Une machine vierge (CI, nouvel utilisateur) expose des dépendances cachées à un état local qu'on ne remarque jamais en travaillant toujours sur la même machine.
+**Environnement neuf comme révélateur** — Une machine vierge (CI, nouvel utilisateur, nouveau warehouse) expose des dépendances cachées à un état local qu'on ne remarque jamais en travaillant toujours sur le même moteur.
  
 ---
  
 ## CI/CD (GitHub Actions)
  
-**Workflow** — Fichier YAML (`.github/workflows/`) décrivant quand et comment exécuter des tâches automatisées ; doit impérativement être à la racine du dépôt.
+**Workflow** — Fichier YAML (`.github/workflows/`) décrivant quand et comment exécuter des tâches automatisées.
  
-**Runner** — Machine virtuelle entièrement vierge prêtée par GitHub pour exécuter le workflow, détruite après chaque run — sans aucune trace des runs précédents ni de la machine locale du développeur.
+**Runner** — Machine virtuelle entièrement vierge prêtée par GitHub pour exécuter le workflow, détruite après chaque run.
  
-**`on: pull_request`** — Déclencheur qui lance le workflow à chaque ouverture ou mise à jour d'une Pull Request, avant toute fusion vers `main`.
+**`on: pull_request`** — Déclencheur qui lance le workflow à chaque ouverture ou mise à jour d'une Pull Request.
  
-**`working-directory`** — Précise depuis quel sous-dossier une étape s'exécute, indépendamment de la racine du repo.
+**Dépendance transitive** — Un paquet requis non pas directement par le code, mais par un autre paquet dont on dépend.
  
-**Dépendance transitive** — Un paquet requis non pas directement par le code, mais par un autre paquet dont on dépend (ex. : `pywin32`, requis par `mcp` sur Windows uniquement).
+**Chemin relatif vs absolu — le vrai critère** — Absolu si le processus est démarré par un tiers sans contrôle du dossier de départ. Relatif si le script est lancé manuellement depuis un dossier connu.
  
-**Marqueur PEP 508** — Syntaxe conditionnelle dans `requirements.txt` pour installer un paquet selon la plateforme (`; sys_platform == "win32"`) — pas toujours suffisante en pratique ; la suppression pure reste parfois la solution la plus robuste.
- 
-**Chemin relatif vs absolu — le vrai critère** — Absolu si le processus est démarré par un tiers sans contrôle du dossier de départ (Planificateur, Claude Desktop). Relatif si le script est lancé manuellement depuis un dossier connu (rend le code portable entre machines, y compris vers la CI).
- 
-**Status check** — Le résultat (✅/❌) d'un job CI affiché sur une Pull Request. Sans règle de protection, un simple indicateur ignorable, pas un blocage réel.
- 
-**Règle de protection de branche** — Configuration GitHub rendant un status check obligatoire avant fusion — grise physiquement le bouton de fusion tant que la CI n'est pas verte.
+**Règle de protection de branche** — Configuration GitHub rendant un status check obligatoire avant fusion.
  
 ---
  
 ## Power BI & intégration BI
  
-**ODBC (Open Database Connectivity)** — Protocole standard de connexion à une base de données ; passage obligé pour connecter Power BI à DuckDB, faute de connecteur natif.
+**ODBC (Open Database Connectivity)** — Protocole standard de connexion à une base de données ; passage obligé pour connecter Power BI à DuckDB.
  
-**DSN (Data Source Name)** — Configuration nommée d'une connexion ODBC (nom, chemin du fichier base), enregistrée via l'outil "Sources de données ODBC" (`odbcad32.exe`) — à ne pas confondre avec l'installateur du pilote lui-même.
+**DSN (Data Source Name)** — Configuration nommée d'une connexion ODBC.
  
-**`mart_decisions`** — Table plate réinjectant la classification du graphe dans DuckDB (`entity_type`, `entity_id`, `label`), consommable par tout outil SQL/BI sans jamais avoir besoin de parler SPARQL.
+**`mart_decisions`** — Table plate réinjectant la classification du graphe dans DuckDB, consommable par tout outil SQL/BI sans SPARQL.
  
-**Chargement en parallèle des tables** — Comportement par défaut de Power BI ouvrant plusieurs connexions simultanées à la source lors du chargement ; à désactiver explicitement face à une base mono-écrivain comme DuckDB.
+**Chargement en parallèle des tables** — Comportement par défaut de Power BI ouvrant plusieurs connexions simultanées ; à désactiver face à une base mono-écrivain.
  
-**`.pbip` (Power BI Project)** — Format de sauvegarde éclatant le modèle en fichiers texte/JSON versionnables et diff-ables dans Git, contrairement au binaire opaque `.pbix`.
+**`.pbip` (Power BI Project)** — Format de sauvegarde éclatant le modèle en fichiers texte/JSON versionnables.
  
-**Mesure DAX** — Calcul défini dans le modèle Power BI (ex. : `CALCULATE(SUM(...), condition)`), traduction manuelle d'une métrique du semantic layer dbt dans le langage de Power BI.
+**Mesure DAX** — Calcul défini dans le modèle Power BI, traduction manuelle d'une métrique du semantic layer.
  
-**`DIVIDE()`** — Fonction DAX de division sécurisée, avec une valeur de repli explicite en cas de division par zéro — équivalent du `COALESCE`/`NULLIF` combinés en SQL.
+**`DIVIDE()`** — Fonction DAX de division sécurisée, avec une valeur de repli explicite en cas de division par zéro.

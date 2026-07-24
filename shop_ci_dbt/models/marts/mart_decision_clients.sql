@@ -24,8 +24,11 @@ select
     vc.nb_commandes,
     vc.ca_total,
     vc.derniere_commande,
-    date_diff('day', vc.derniere_commande, r.date_ref)  as jours_inactivite,
-    date_diff('day', dc.date_inscription, r.date_ref)   as anciennete_jours
+    
+    -- Utilisation de la macro datediff portable (debut, fin, unite)
+    {{ dbt.datediff("vc.derniere_commande", "r.date_ref", "day") }} as jours_inactivite,
+    {{ dbt.datediff("dc.date_inscription", "r.date_ref", "day") }} as anciennete_jours
+
 from ventes_client vc
 cross join reference r
 inner join {{ ref('dim_clients') }} dc on vc.id_client = dc.id_client

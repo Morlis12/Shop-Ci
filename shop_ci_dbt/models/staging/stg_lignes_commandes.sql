@@ -1,23 +1,23 @@
 with source_data as (
 
-    select * from {{ source('source_brut', 'lignes_commande') }}
+    select *from {{ source('source_brut', 'lignes_commande') }}
 
 ),
 
 cleaned_data as (
 
     select
-        -- force la conversion en texte (varchar) pour la compatibilité avec trim/lower dans les tests de missing
-        cast(id_ligne as varchar) as raw_id_ligne,
-        cast(id_commande as varchar) as raw_id_commande,
-        cast(id_produit as varchar) as raw_id_produit,
-        cast(quantite as varchar) as raw_quantite,
+        -- force la conversion en texte de manière portable (STRING/VARCHAR)
+        cast(id_ligne as {{ dbt.type_string() }}) as raw_id_ligne,
+        cast(id_commande as {{ dbt.type_string() }}) as raw_id_commande,
+        cast(id_produit as {{ dbt.type_string() }}) as raw_id_produit,
+        cast(quantite as {{ dbt.type_string() }}) as raw_quantite,
 
-        -- typage, nettoyage et conversion sécurisée des données
-        try_cast(id_ligne as integer) as id_ligne,
-        try_cast(id_commande as integer) as id_commande,
-        try_cast(id_produit as integer) as id_produit,
-        try_cast(quantite as integer) as quantite
+        -- typage et conversion sécurisée universelle (SAFE_CAST/TRY_CAST)
+        {{ dbt.safe_cast("id_ligne", dbt.type_int()) }} as id_ligne,
+        {{ dbt.safe_cast("id_commande", dbt.type_int()) }} as id_commande,
+        {{ dbt.safe_cast("id_produit", dbt.type_int()) }} as id_produit,
+        {{ dbt.safe_cast("quantite", dbt.type_int()) }} as quantite
 
     from source_data
 

@@ -1,4 +1,3 @@
-
 with clients as (
 
     select
@@ -16,10 +15,12 @@ with clients as (
 membre_inconnu as (
 
     select
-        -1 as id_client,
+        -- CORRECTION : Force le typage numérique de l'ID pour correspondre strictement au schéma BigQuery
+        cast(-1 as {{ dbt.type_int() }}) as id_client,
         'Client inconnu' as nom_complet,
-        cast(null as varchar) as ville,
-        cast(null as varchar) as pays,
+        -- CORRECTION : Remplacement de varchar par le type texte universel
+        cast(null as {{ dbt.type_string() }}) as ville,
+        cast(null as {{ dbt.type_string() }}) as pays,
         cast(null as date) as date_inscription
 
 )

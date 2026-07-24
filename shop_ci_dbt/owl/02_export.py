@@ -4,50 +4,46 @@ Peuple le graphe avec les INDIVIDUS reels : un noeud par client, par produit,
 par ligne de vente, avec leurs attributs (DatatypeProperty) et leurs liens
 (ObjectProperty aPourClient/aPourProduit). Aucun label metier ici : la
 classification est deduite ensuite (fichier 03_classify.py).
-Source : DuckDB en LECTURE SEULE (mono-ecrivain -> jamais en collision
-avec le pipeline dbt planifie).
+Source : BigQuery, requetes en LECTURE SEULE.
 """
-import duckdb, os
+from google.cloud import bigquery
 from rdflib import Graph, Namespace, RDF, XSD, Literal
 
 SHOP = Namespace("http://shop-ci.ci/ontologie#")
-DB_PATH = DB_PATH = "../dev.duckdb"
+PROJET = "shop-503309"
+DATASET = "shop_ci_dev"
+CLE_JSON = "../../.secrets.json"
 
-con = duckdb.connect(DB_PATH, read_only=True)
+client = bigquery.Client.from_service_account_json(CLE_JSON, project=PROJET)
 
 g = Graph()
 g.bind("shop", SHOP)
 
 # ---- CLIENTS ----
-clients = con.execute("""
-    SELECT id_client, nom_complet , nb_commandes, ca_total, jours_inactivite, anciennete_jours
-    FROM mart_decision_clients
-""").fetchall()
-ccols = [d[0] for d in con.description]
-
-for row in clients:
-    d = dict(zip(ccols, row))
+requete_clients = f"""
+    SELECT id_client, nom_complet, nb_commandes, ca_total, jours_inactivite, anciennete_jours
+    FROM `{PROJET}.{DATASET}.mart_decision_clients`
+"""
+for row in client.query(requete_clients).result():
+    d = dict(row.items())
     uri = SHOP[f"client_{d['id_client']}"]
     g.add((uri, RDF.type, SHOP.Client))
     g.add((uri, SHOP.aIdClient, Literal(int(d["id_client"]), datatype=XSD.integer)))
     g.add((uri, SHOP.aCaTotal, Literal(float(d["ca_total"]), datatype=XSD.decimal)))
     g.add((uri, SHOP.aNbCommandes, Literal(int(d["nb_commandes"]), datatype=XSD.integer)))
     g.add((uri, SHOP.aNomClient, Literal(str(d["nom_complet"]), datatype=XSD.string)))
-    # NULL (membre -1) -> on N'AJOUTE PAS le triplet, plutot qu'une valeur factice
     if d["jours_inactivite"] is not None:
         g.add((uri, SHOP.aJoursInactivite, Literal(int(d["jours_inactivite"]), datatype=XSD.integer)))
     if d["anciennete_jours"] is not None:
         g.add((uri, SHOP.aAncienneteJours, Literal(int(d["anciennete_jours"]), datatype=XSD.integer)))
 
 # ---- PRODUITS ----
-produits = con.execute("""
+requete_produits = f"""
     SELECT id_produit, nom_produit, ca_total, taux_marge_pct, quantite_vendue
-    FROM mart_decision_produits
-""").fetchall()
-pcols = [d[0] for d in con.description]
-
-for row in produits:
-    d = dict(zip(pcols, row))
+    FROM `{PROJET}.{DATASET}.mart_decision_produits`
+"""
+for row in client.query(requete_produits).result():
+    d = dict(row.items())
     uri = SHOP[f"produit_{d['id_produit']}"]
     g.add((uri, RDF.type, SHOP.Produit))
     g.add((uri, SHOP.aCaProduit, Literal(float(d["ca_total"]), datatype=XSD.decimal)))
@@ -56,15 +52,13 @@ for row in produits:
     g.add((uri, SHOP.aNomProduit, Literal(str(d["nom_produit"]), datatype=XSD.string)))
 
 # ---- VENTES (relie Client <-> Produit via ObjectProperty) ----
-ventes = con.execute("""
+requete_ventes = f"""
     SELECT id_ligne, id_client, id_produit, montant_ligne, marge_ligne, jour_commande
-    FROM fait_ventes
+    FROM `{PROJET}.{DATASET}.fait_ventes`
     WHERE statut NOT IN ('annulee', 'retournee')
-""").fetchall()
-vcols = [d[0] for d in con.description]
-
-for row in ventes:
-    d = dict(zip(vcols, row))
+"""
+for row in client.query(requete_ventes).result():
+    d = dict(row.items())
     uri = SHOP[f"vente_{d['id_ligne']}"]
     g.add((uri, RDF.type, SHOP.Vente))
     g.add((uri, SHOP.aMontantVente, Literal(float(d["montant_ligne"]), datatype=XSD.decimal)))
@@ -73,7 +67,6 @@ for row in ventes:
     g.add((uri, SHOP.aPourProduit, SHOP[f"produit_{d['id_produit']}"]))
     g.add((uri, SHOP.aMargeVente, Literal(float(d["marge_ligne"]), datatype=XSD.decimal)))
 
-con.close()
 contenu = g.serialize(format="turtle")
 with open("shop_ci_data.ttl", "w", encoding="utf-8") as f:
     f.write(contenu)

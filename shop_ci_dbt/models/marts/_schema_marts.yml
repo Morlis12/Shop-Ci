@@ -4,8 +4,6 @@ models:
 
   # =========================================================================
   # DIMENSION : CLIENTS
-  # Le QUI du modèle en étoile. Sans PII (email/téléphone exclus - RGPD).
-  # Contient le membre inconnu id=-1 pour les faits orphelins (Kimball).
   # =========================================================================
   - name: dim_clients
     description: "Dimension clients (sans PII), avec membre inconnu id=-1."
@@ -14,21 +12,19 @@ models:
         enforced: true
     columns:
       - name: id_client
-        data_type: integer
+        data_type: int64
         tests: [unique, not_null]
       - name: nom_complet
-        data_type: varchar
+        data_type: string
       - name: ville
-        data_type: varchar
+        data_type: string
       - name: pays
-        data_type: varchar
+        data_type: string
       - name: date_inscription
         data_type: date
 
   # =========================================================================
   # DIMENSION : PRODUITS
-  # Le QUOI du modèle en étoile. Catégories vides remplacées par
-  # 'Non catégorisé' en amont (dim), prix et coûts numériques.
   # =========================================================================
   - name: dim_produits
     description: "Dimension produits."
@@ -37,23 +33,21 @@ models:
         enforced: true
     columns:
       - name: id_produit
-        data_type: integer
+        data_type: int64
         tests: [unique, not_null]
       - name: nom_produit
-        data_type: varchar
+        data_type: string
       - name: categorie
-        data_type: varchar
+        data_type: string
       - name: prix_unitaire
-        data_type: integer
+        data_type: int64
       - name: cout_unitaire
-        data_type: integer
+        data_type: int64
       - name: statut
-        data_type: varchar
+        data_type: string
 
   # =========================================================================
   # DIMENSION : CALENDRIER
-  # Le QUAND du modèle en étoile. Table GÉNÉRÉE (une ligne par jour),
-  # équivalent de la table de dates Power BI.
   # =========================================================================
   - name: dim_calendrier
     description: "Dimension calendrier générée, un jour par ligne."
@@ -68,26 +62,22 @@ models:
         granularity: day
         tests: [unique, not_null]
       - name: annee
-        data_type: bigint
+        data_type: int64
       - name: numero_mois
-        data_type: bigint
+        data_type: int64
       - name: nom_mois
-        data_type: varchar
+        data_type: string
       - name: annee_mois
-        data_type: varchar
+        data_type: string
       - name: numero_jour_semaine
-        data_type: bigint
+        data_type: int64
       - name: nom_jour
-        data_type: varchar
+        data_type: string
       - name: est_weekend
         data_type: boolean
 
   # =========================================================================
   # FAIT : VENTES
-  # GRAIN : une ligne = UN produit dans UNE commande.
-  # Toutes les mesures sont vraies à ce grain. Les relationships vers les
-  # dimensions sont en severity ERROR : après re-routage + membre -1,
-  # aucun orphelin n'a le droit d'exister ici.
   # =========================================================================
   - name: fait_ventes
     description: "Faits ventes. Grain : une ligne de commande."
@@ -96,12 +86,12 @@ models:
         enforced: true
     columns:
       - name: id_ligne
-        data_type: integer
-        tests: [unique, not_null]    # le GRAIN : s'il casse, tout ment
+        data_type: int64
+        tests: [unique, not_null]
       - name: id_commande
-        data_type: integer
+        data_type: int64
       - name: id_client
-        data_type: integer
+        data_type: int64
         tests:
           - not_null
           - relationships:
@@ -109,7 +99,7 @@ models:
                 to: ref('dim_clients')
                 field: id_client
       - name: id_produit
-        data_type: integer
+        data_type: int64
         tests:
           - not_null
           - relationships:
@@ -125,29 +115,25 @@ models:
                 to: ref('dim_calendrier')
                 field: jour
       - name: statut
-        data_type: varchar
+        data_type: string
       - name: canal
-        data_type: varchar
+        data_type: string
       - name: quantite
-        data_type: integer
+        data_type: int64
         tests: [not_null]
       - name: montant_ligne
-        data_type: integer
+        data_type: int64
         tests: [not_null]
       - name: cout_ligne
-        data_type: integer
+        data_type: int64
       - name: marge_ligne
-        data_type: integer
+        data_type: int64
       - name: date_commande_chargement
         data_type: timestamp
         tests: [not_null]
 
   # =========================================================================
   # FAIT : PAIEMENTS
-  # GRAIN : une ligne = UN paiement (une commande entière).
-  # Grain différent de fait_ventes -> table séparée (constellation).
-  # Flags : est_reussi (statut), est_doublon (retry technique),
-  # vrai_reussi (raccourci analyste = reussi ET non doublon).
   # =========================================================================
   - name: fait_paiements
     description: "Faits paiements. Grain : un paiement."
@@ -156,12 +142,12 @@ models:
         enforced: true
     columns:
       - name: id_paiement
-        data_type: integer
+        data_type: int64
         tests: [unique, not_null]
       - name: id_commande
-        data_type: integer
+        data_type: int64
       - name: id_client
-        data_type: integer
+        data_type: int64
         tests:
           - not_null
           - relationships:
@@ -171,36 +157,31 @@ models:
       - name: jour_commande
         data_type: date
       - name: canal
-        data_type: varchar
+        data_type: string
       - name: methode
-        data_type: varchar
+        data_type: string
       - name: statut_paiement
-        data_type: varchar
+        data_type: string
       - name: est_reussi
-        data_type: integer
+        data_type: int64
         tests:
           - accepted_values:
-              arguments:
-                values: [0, 1]
-                quote: false
+              values: [0, 1]
+              quote: false  # <-- Indique à dbt de traiter les critères comme des nombres
       - name: est_doublon
-        data_type: integer
+        data_type: int64
         tests:
           - accepted_values:
-              arguments:
-                values: [0, 1]
-                quote: false
+              values: [0, 1]
+              quote: false  # <-- Indique à dbt de traiter les critères comme des nombres
       - name: vrai_reussi
-        data_type: integer
+        data_type: int64
         tests:
           - accepted_values:
-              arguments:
-                values: [0, 1]
-                quote: false
+              values: [0, 1]
+              quote: false  # <-- Indique à dbt de traiter les critères comme des nombres
       - name: montant
-        data_type: integer
+        data_type: int64
         tests: [not_null]
       - name: date_commande_chargement
         data_type: timestamp
-     
- 
