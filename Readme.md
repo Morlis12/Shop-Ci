@@ -1,8 +1,8 @@
 # Shop_CI — Plateforme Analytics Engineering de bout en bout
  
-**dbt · DuckDB · BigQuery · MetricFlow · Power BI · Graphe de connaissances (RDF/OWL/SPARQL) · Serveur MCP · CI/CD GitHub Actions**
+**dbt · DuckDB · BigQuery · MetricFlow · Power BI · Graphe de connaissances (RDF/OWL/SPARQL) · Serveur MCP · CI/CD GitHub Actions · Dagster**
  
-Projet pédagogique et portfolio construit de A à Z : d'un jeu de données brutes volontairement sales jusqu'à un agent IA capable d'interroger les décisions métier de l'entreprise en langage naturel, avec une chaîne CI/CD complète, une restitution Power BI, et une portabilité multi-warehouse démontrée (DuckDB local ↔ BigQuery cloud).
+Projet pédagogique et portfolio construit de A à Z : d'un jeu de données brutes volontairement sales jusqu'à un agent IA capable d'interroger les décisions métier de l'entreprise en langage naturel, avec une chaîne CI/CD complète, une restitution Power BI, une portabilité multi-warehouse démontrée, et une orchestration moderne.
  
 > Statut : document vivant, mis à jour au fil de l'avancement du projet.
  
@@ -38,26 +38,26 @@ CSV bruts (data_brute/)
         ├──► MARTS DE DÉCISION — mart_decision_clients, mart_decision_produits
         │           │
         │           ▼
-        │     GRAPHE DE CONNAISSANCES (RDF/OWL/SPARQL)
+        │     GRAPHE DE CONNAISSANCES (RDF/OWL/SPARQL, sur BigQuery)
         │     ontologie → export → classification métier
         │           │
         │           ├──► SERVEUR MCP (4 outils) ──► Claude Desktop (agent IA)
         │           │
-        │           └──► 04_ecrire_labels_duckdb.py ──► mart_decisions
+        │           └──► 04_ecrire_labels_BigQuery.py ──► mart_decisions
         │                        │
         │                        ▼
         └──────────────────► POWER BI (ODBC, DAX répliquant le semantic layer)
  
-CI/CD (GitHub Actions) : sur chaque Pull Request → dbt build/test → génération
-du graphe → règle de protection de branche bloquant toute fusion non validée
+ORCHESTRATION :
+  Niveau 1 — pipeline_quotidien.ps1 (Windows Task Scheduler, local)
+  Niveau 2 — CI/CD GitHub Actions (build/test/graphe sur chaque PR, branche protégée)
+  Niveau 3 — Dagster OSS (assets dbt auto-découverts, job + schedule quotidien)
  
 WAREHOUSES SUPPORTÉS (même code source, cible au choix) :
-  target: dev          → DuckDB local, bac à sable rapide, hors-ligne
-  target: bigquery_dev  → BigQuery, schéma personnel isolé (shop_ci_dev)
-  target: bigquery_prod → BigQuery, schéma de production (shop_ci_prod)
+  target: dev            → DuckDB local, bac à sable rapide, hors-ligne
+  target: bigquery_dev    → BigQuery, schéma personnel isolé (shop_ci_dev)
+  target: bigquery_prod   → BigQuery, schéma de production (shop_ci_prod)
 ```
- 
-L'orchestration locale (Windows Task Scheduler) exécute quotidiennement : fraîcheur des sources (sentinelle) → snapshots → build. La CI GitHub Actions, elle, valide chaque changement de code avant fusion, sur une machine neuve, indépendamment de l'état local.
  
 ---
  
@@ -68,30 +68,35 @@ Shop Ci/
 ├── .github/
 │   └── workflows/
 │       └── ci.yml              # CI GitHub Actions : build, test, graphe
-├── .secrets/                    # clé de service BigQuery (gitignoré, jamais versionné)
-├── charger_csv_bigquery.py      # ingestion CSV → tables BigQuery (all-STRING)
+├── .secrets.json                 # clé de service BigQuery (gitignoré)
+├── charger_csv_bigquery.py       # ingestion CSV → tables BigQuery (all-STRING)
+├── dagster_shop_ci/
+│   └── dagster_shop_ci/
+│       ├── assets.py             # dbt_assets (auto-découverte) + job
+│       ├── definitions.py        # Definitions + schedule quotidien
+│       └── __init__.py
 ├── shop_ci_dbt/
 │   ├── models/
-│   │   ├── staging/            # nettoyage 1-pour-1, portable multi-warehouse
-│   │   ├── intermediate/       # réconciliation clients
-│   │   └── marts/              # dimensions, faits, marts de décision, semantic layer
-│   ├── macros/                 # nettoyer_date.sql, generate_schema_name.sql
-│   ├── snapshots/              # SCD Type 2 (clients, produits)
-│   ├── owl/                    # graphe de connaissances (généré, gitignoré)
-│   │   ├── 01_schema.py        # ontologie : classes, sous-classes, propriétés
-│   │   ├── 02_export.py        # peuplement des individus depuis DuckDB
-│   │   ├── 03_classify.py      # classification par règles SPARQL CONSTRUCT
-│   │   └── 04_ecrire_labels_duckdb.py  # réinjecte les labels dans DuckDB (mart_decisions)
-│   ├── powerbi/                # modèle Power BI versionné (.pbip)
+│   │   ├── staging/              # nettoyage 1-pour-1, portable multi-warehouse
+│   │   ├── intermediate/         # réconciliation clients
+│   │   └── marts/                # dimensions, faits, marts de décision, semantic layer
+│   ├── macros/                   # nettoyer_date.sql, generate_schema_name.sql
+│   ├── snapshots/                # SCD Type 2 (clients, produits)
+│   ├── owl/                      # graphe de connaissances (généré, gitignoré)
+│   │   ├── 01_schema.py          # ontologie : classes, sous-classes, propriétés
+│   │   ├── 02_export.py          # peuplement des individus depuis BigQuery
+│   │   ├── 03_classify.py        # classification par règles SPARQL CONSTRUCT
+│   │   └── 04_ecrire_labels_BigQuery.py  # réinjecte les labels (mart_decisions)
+│   ├── powerbi/                  # modèle Power BI versionné (.pbip)
 │   │   └── Shop_CI.pbip
 │   └── dbt_project.yml
 ├── mcp/
-│   └── serveur_mcp.py          # serveur MCP (4 outils, branché à Claude Desktop)
-├── data_brute/                 # sources CSV versionnées
-├── tests_pedagogiques/         # 18 tests HTML interactifs (révision, certification, entretien)
-├── pipeline_quotidien.ps1      # orchestration Windows planifiée
+│   └── serveur_mcp.py            # serveur MCP (4 outils, branché à Claude Desktop)
+├── data_brute/                   # sources CSV versionnées
+├── tests_pedagogiques/           # 18 tests HTML interactifs (révision, certification, entretien)
+├── pipeline_quotidien.ps1        # orchestration Windows planifiée (niveau 1)
 ├── requirements.txt
-└── logs/                       # journaux d'exécution (gitignoré)
+└── logs/                         # journaux d'exécution (gitignoré)
 ```
  
 ---
@@ -102,41 +107,39 @@ Shop Ci/
 - **Staging** : dédoublonnage déterministe, macro `nettoyer_date` (cascade de formats non ambiguës), flags de qualité (paiements en retry, etc.)
 - **Intermediate** : réconciliation des clients dédoublonnés vers un survivant unique
 - **Marts Kimball** : grain explicite par table de faits, membre inconnu `id=-1` conservé (jamais de disparition silencieuse de CA)
-- **Qualité** : 63+ data tests, 4 unit tests (dont un test du filtre incrémental avec mock de `{{ this }}`), contrats de modèle sur tous les marts, freshness (warn 12h / error 24h, volontairement non bloquante sur données fictives)
+- **Qualité** : 63+ data tests, 4 unit tests, contrats de modèle sur tous les marts, freshness (warn 12h / error 24h)
 - **Historisation** : snapshots SCD Type 2 sur clients et produits
 - **Performance** : deux tables de faits en incrémental, fenêtre de rattrapage de 3 jours
 ### Portabilité multi-warehouse (DuckDB ↔ BigQuery)
-- **Ingestion cloud** : `charger_csv_bigquery.py`, un mini-outil d'ingestion (esprit Fivetran) qui pousse les CSV bruts dans BigQuery en forçant tout en `STRING`, préservant le principe d'audit-avant-transformation même hors DuckDB
-- **Code source unique, deux cibles** : les modèles SQL utilisent les macros cross-database de dbt (`dbt.type_string()`, `dbt.safe_cast()`, `dbt.split_part()`, `dbt.dateadd()`) plutôt que des types/fonctions spécifiques à un moteur — même fichier `.sql`, comportement correct sur DuckDB et BigQuery
-- **Routage conditionnel ciblé** : pour les cas sans équivalent cross-database générique (génération de `dim_calendrier`), un bloc Jinja `{% if target.type == 'bigquery' %}` bascule entre deux implémentations natives, chacune optimale sur son moteur
-- **Environnements dev/prod sur le même moteur** : `bigquery_dev` (schéma personnel isolé) et `bigquery_prod` (production), tous deux sur BigQuery — DuckDB reste réservé au prototypage local rapide, jamais utilisé comme un faux "environnement de dev" d'un moteur différent de la prod
-- **`generate_schema_name` personnalisée** : le schéma cible dépend de la cible active, garantissant qu'un run de dev n'écrit jamais accidentellement dans le schéma de production
+- **Ingestion cloud** : `charger_csv_bigquery.py`, un mini-outil d'ingestion (esprit Fivetran) forçant tout en `STRING`
+- **Code source unique, deux cibles** : macros cross-database dbt (`dbt.type_string()`, `dbt.safe_cast()`, `dbt.split_part()`, `dbt.dateadd()`)
+- **Routage conditionnel ciblé** : Jinja `{% if target.type == 'bigquery' %}` pour les cas sans équivalent générique
+- **Environnements dev/prod sur le même moteur** : `bigquery_dev` et `bigquery_prod`, jamais DuckDB=dev vs BigQuery=prod
 ### Semantic Layer (MetricFlow)
 6 métriques gouvernées, dont `ca_officiel` — LA définition de référence du chiffre d'affaires (exclut annulées/retournées).
  
-### Orchestration locale
-`pipeline_quotidien.ps1` : chemins absolus, exécutables de la venv appelés directement, journalisation horodatée (`Start-Transcript`), verdict par codes de sortie, fraîcheur volontairement exclue du jury final (décision documentée).
- 
+### Orchestration — 3 niveaux de maturité
+- **Niveau 1 (local)** : `pipeline_quotidien.ps1`, Windows Task Scheduler, codes de sortie, verdict explicite
+- **Niveau 2 (CI/CD cloud)** : GitHub Actions, machine vierge à chaque run, branche protégée
+- **Niveau 3 (orchestrateur dédié)** : **Dagster OSS**, local et gratuit sans limite de temps
+  - `dbt_assets` découvre automatiquement les 13 modèles dbt depuis `manifest.json` — aucun asset redéclaré à la main
+  - Un `job` regroupe tous les assets ; un `schedule` (cron `0 6 * * *`) reproduit l'horaire de `pipeline_quotidien.ps1`
+  - Interface web locale (`dagster dev`) avec lineage visuel interactif, historique des runs persistant (`DAGSTER_HOME` fixé)
+  - Mêmes contraintes que le build manuel : `--full-refresh --exclude path:snapshots` (sandbox BigQuery gratuit sans DML/MERGE)
 ### CI/CD (GitHub Actions)
 - Déclenchement automatique sur chaque Pull Request vers `main`
-- Machine virtuelle neuve à chaque exécution : `dbt run` → `dbt test` → génération complète du graphe de connaissances (`01_schema.py` → `02_export.py` → `03_classify.py`)
-- **Règle de protection de branche** active : `main` ne peut recevoir aucune fusion tant que la CI n'est pas verte — un vrai garde-fou structurel, pas un simple indicateur
-- A révélé et corrigé en conditions réelles : un bug de mock de test invisible en local (colonne manquante dans le mock de `{{ this }}`), une dépendance Windows-only (`pywin32`) jamais nécessaire au projet, plusieurs chemins absolus non portables
+- Machine virtuelle neuve à chaque exécution : `dbt build` (BigQuery) → génération complète du graphe de connaissances
+- **Règle de protection de branche** active
+- A révélé et corrigé en conditions réelles : un bug de mock de test invisible en local, une dépendance Windows-only (`pywin32`), plusieurs chemins absolus non portables
 ### Graphe de connaissances
-Architecture en 3 fichiers (patron ontologie / export / classification, inspiré d'un projet antérieur) :
-- **Ontologie** : classes `Client`, `Produit`, `Vente` ; sous-classes de décision (`ClientVIP`, `ClientARisque`, `ClientNonIdentifie`, `ProduitStar`, `ProduitMargeFaible`...) documentées avec leur règle exacte
-- **Export** : peuplement des individus réels depuis DuckDB (lecture seule), incluant désormais `aMargeVente` en plus du montant
-- **Classification** : règles SPARQL `CONSTRUCT` appliquées par ordre de priorité, avec contrôle de cohérence automatisé (un seul label par entité)
+Architecture en 4 fichiers (ontologie / export / classification / réinjection), désormais entièrement sur BigQuery :
 - Résultat courant : 499 clients (47 VIP, 10 à risque, 6 nouveaux, 1 non identifié, 435 standards) · 20 produits (2 stars, 6 à marge faible, 12 standards)
 ### Serveur MCP
-4 outils exposés à un agent IA (Claude Desktop) : `interroger_graphe` (SPARQL libre), `lister_categorie`, `expliquer_categorie`, `calculer_metrique`. Branché et validé en conditions réelles.
+4 outils exposés à un agent IA (Claude Desktop) : `interroger_graphe`, `lister_categorie`, `expliquer_categorie`, `calculer_metrique`.
  
 ### Power BI
-- Connexion **ODBC** vers `dev.duckdb` (aucun connecteur natif DuckDB, passage obligé par le pilote ODBC officiel)
-- Script `04_ecrire_labels_duckdb.py` : réinjecte la classification du graphe (499+20 lignes) dans DuckDB sous forme de table plate `mart_decisions(entity_type, entity_id, label)`, consommable sans SPARQL
-- Modèle relationnel en étoile autour de `fait_ventes`, avec deux requêtes filtrées (`decisions_clients`, `decisions_produits`) dérivées de `mart_decisions` pour éviter toute ambiguïté de jointure entre identifiants clients et produits
-- Mesures DAX répliquant fidèlement le semantic layer : `ca_officiel`, `marge`, `taux_marge`, `nb_commandes_officiel`, `panier_moyen` — même filtre (hors annulées/retournées) que MetricFlow et le graphe
-- Format de sauvegarde **`.pbip`** (Power BI Project) plutôt que `.pbix` : éclate le modèle en fichiers texte/JSON versionnables et diff-ables dans Git, contrairement au binaire opaque `.pbix`
+Connexion ODBC, table `mart_decisions` réinjectée, mesures DAX répliquant fidèlement le semantic layer, format `.pbip` versionnable.
+ 
 ---
  
 ## 5. Démarrage rapide
@@ -147,56 +150,48 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
  
-# --- Cible locale (DuckDB, par défaut) ---
+# --- Pipeline dbt (BigQuery) ---
+python charger_csv_bigquery.py
 cd shop_ci_dbt
-dbt build
-dbt docs generate
+dbt build --target bigquery_dev --full-refresh --no-partial-parse --exclude path:snapshots
  
-# --- Cible cloud (BigQuery) ---
-python charger_csv_bigquery.py          # ingestion des CSV, une fois
-dbt build --target bigquery_dev         # développement, schéma isolé
-dbt build --target bigquery_prod        # production
- 
-# Semantic layer
-mf query --metrics ca_officiel
- 
-# Graphe de connaissances (depuis owl/, dans l'ordre)
+# --- Graphe de connaissances ---
 cd owl
 python 01_schema.py
 python 02_export.py
 python 03_classify.py
-python 04_ecrire_labels_duckdb.py   # réinjecte les labels pour Power BI
+python 04_ecrire_labels_BigQuery.py
  
-# CI/CD : toute Pull Request vers main déclenche automatiquement
-# .github/workflows/ci.yml (build, test, génération du graphe)
+# --- Orchestration Dagster (interface web locale) ---
+cd ..\..\dagster_shop_ci
+dagster dev -f dagster_shop_ci\definitions.py
+# puis ouvrir http://127.0.0.1:3000
+ 
+# --- CI/CD : automatique sur chaque Pull Request vers main ---
 ```
- 
-Le serveur MCP se configure dans `claude_desktop_config.json` (voir section Limitations pour une contrainte connue). Power BI se connecte via ODBC (DSN `dev.duckdb`, pilote officiel DuckDB) — voir la section Limitations pour un piège de configuration fréquent.
  
 ---
  
 ## 6. Limitations connues et décisions assumées
  
-- **Mono-écrivain DuckDB** : un seul processus peut écrire/lire de façon exclusive à la fois. Contrainte rencontrée à plusieurs reprises (processus Python zombies, Power BI ouvrant plusieurs connexions parallèles au chargement) ; résolue en désactivant le chargement parallèle des tables dans Power BI, et par une vigilance systématique sur les processus en arrière-plan. En production réelle, résolue par un warehouse client-serveur (Postgres, BigQuery, etc.).
-- **Fraîcheur non bloquante** : les données fictives s'arrêtent en 2025, la fraîcheur déclencherait systématiquement une erreur ; exclue volontairement du verdict final du pipeline (documenté dans le script).
-- **Palier gratuit BigQuery sans DML/MERGE** : le mode sandbox gratuit (sans carte bancaire) interdit les requêtes de modification de données, bloquant nativement les modèles incrémentaux et les snapshots. Contournement actuel : `--full-refresh --exclude path:snapshots` sur la cible BigQuery — un contournement temporaire de bac à sable, pas une solution de production (résolu automatiquement dès l'activation de la facturation, même en restant dans le palier gratuit permanent de traitement).
-- **MetricFlow non invocable en sous-processus depuis le serveur MCP** : Claude Desktop (version Windows Store) tourne dans un environnement sandboxé (AppContainer) qui bloque la création de processus enfants et certaines opérations bas niveau (gestion de signal). Contournement : `calculer_metrique` calcule `ca_officiel` directement via une requête SPARQL sur le graphe — résultat rigoureusement identique au semantic layer car le même filtre (hors annulées/retournées) est appliqué dès l'export du graphe. `marge` n'a pas encore ce contournement : la propriété a été ajoutée à l'export du graphe, mais l'outil MCP ne l'exploite pas encore.
-- **Trois consommateurs, une seule vérité — mais reproduite, pas partagée** : `ca_officiel` est défini une fois dans `_semantic.yml`, mais répliqué manuellement en DAX pour Power BI et en SPARQL pour le graphe, faute d'un vrai Semantic Layer hébergé unique interrogé par tous. Le jour où la définition change, il faut la corriger aux trois endroits — un risque de divergence assumé et documenté, pas résolu.
-- **CI/CD sans `state:modified`** : chaque exécution reconstruit l'intégralité du projet depuis zéro, plutôt que de ne retraiter que les modèles modifiés — un luxe technique absent, largement suffisant à l'échelle de Shop_CI.
-- **Graphe et Power BI branchés sur DuckDB uniquement** : la migration BigQuery couvre le pipeline dbt ; le graphe (`owl/`) et la connexion Power BI ODBC restent, pour l'instant, branchés sur `dev.duckdb` local — étape restant à faire pour une cohérence complète cloud.
-- **Piège de configuration ODBC/Power BI documenté** : le champ "Database" du DSN DuckDB peut se corrompre silencieusement (caractères parasites, chemins concaténés au dossier d'installation de Power BI) — toujours resaisir le chemin proprement en cas d'erreur `SQLDriverConnect` peu claire.
+- **Mono-écrivain DuckDB** : résolu par migration vers BigQuery pour la production ; Power BI nécessite de désactiver le chargement parallèle des tables.
+- **Palier gratuit BigQuery sans DML/MERGE** : `--full-refresh --exclude path:snapshots` sur toutes les cibles BigQuery (build manuel, CI, ET Dagster) — un contournement temporaire, pas une solution de production.
+- **MetricFlow non invocable en sous-processus depuis le serveur MCP** : contournement documenté via calcul SPARQL direct sur le graphe pour `ca_officiel`. `marge` a la donnée exportée mais pas encore l'outil MCP correspondant.
+- **Trois consommateurs, une seule vérité — mais reproduite, pas partagée** : `ca_officiel` défini une fois, répliqué manuellement en DAX et en SPARQL.
+- **Dagster tourne en processus de premier plan** : lancé depuis le terminal intégré VS Code, il s'arrête si VS Code se ferme (comportement normal d'un serveur de dev, pas un bug) — un terminal PowerShell autonome ou un processus détaché résout ce point pour un usage prolongé.
+- **`DAGSTER_HOME` fixé en variable d'environnement permanente** : nécessaire pour que l'historique des runs et l'état du schedule survivent entre les sessions ; sans elle, Dagster utilise un dossier temporaire effacé à chaque fermeture.
+- **CI/CD sans `state:modified`** : chaque exécution reconstruit l'intégralité du projet depuis zéro.
 ---
  
 ## 7. Feuille de route
  
-- [ ] Rebrancher le graphe (`owl/`) et Power BI sur BigQuery plutôt que DuckDB, pour une cohérence cloud complète
-- [ ] Activer la facturation BigQuery (en restant dans le palier gratuit permanent) pour lever la contrainte DML/MERGE et réactiver incrémental + snapshots sur le cloud
+- [ ] Activer le schedule Dagster (actuellement configuré mais désactivé par défaut)
 - [ ] Conteneuriser le pipeline avec Docker
-- [ ] Orchestrer avec Dagster OSS (local, sans contrainte de délai) plutôt que le Planificateur Windows
-- [ ] Data Vault — chantier théorique exploré (test dédié), implémentation réelle (hub/link/satellite sur clients-commandes) à mener en priorité moyenne après le socle cloud
+- [ ] Data Vault — chantier théorique exploré (test dédié), implémentation réelle à mener
 - [ ] Étendre `calculer_metrique` (MCP) pour couvrir `marge` en plus de `ca_officiel`
 - [ ] Gouvernance/RGPD — chantier théorique exploré (test dédié), application concrète non commencée
-- [ ] Serveurs MCP officiels Power BI (Microsoft) — piste explorée en discussion, non implémentée
+- [ ] Activer la facturation BigQuery (palier gratuit permanent) pour lever la contrainte DML/MERGE
+- [ ] Serveurs MCP officiels Power BI (Microsoft) — piste explorée, non implémentée
 ---
  
-*Voir aussi : [WRITE_UP.md](./WRITE_UP.md) pour le récit du projet, [DICTIONNAIRE.md](./DICTIONNAIRE.md) pour le glossaire des termes techniques, et [tests_pedagogiques/](./tests_pedagogiques/) pour 18 modules de révision interactifs couvrant l'intégralité du projet.*
+*Voir aussi : [WRITE_UP.md](./WRITE_UP.md) pour le récit du projet, [DICTIONNAIRE.md](./DICTIONNAIRE.md) pour le glossaire des termes techniques, et [tests_pedagogiques/](./tests_pedagogiques/) pour 18 modules de révision interactifs.*
