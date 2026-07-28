@@ -10,23 +10,13 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
  
 **Membre inconnu (Unknown Member)** — Ligne spéciale (id = -1) accueillant les faits à clé étrangère orpheline.
  
-**Contrat de modèle** — Verrouillage du nom, du type et du nombre de colonnes avant matérialisation.
- 
-**Modèle incrémental** — Matérialisation ne retraitant que les nouvelles lignes, avec upsert.
- 
----
- 
-## Portabilité multi-warehouse (DuckDB ↔ BigQuery)
- 
-**Macro cross-database** — Fonction Jinja de dbt-core traduite automatiquement dans le bon dialecte SQL selon la cible active.
- 
-**`generate_schema_name`** — Macro déterminant le schéma cible réel selon la cible active, isolant dev et prod sur un même warehouse.
+**Macro cross-database** — Fonction Jinja traduite automatiquement selon la cible active (DuckDB, BigQuery).
  
 ---
  
 ## Semantic Layer (MetricFlow)
  
-**Métrique gouvernée** — Définition unique d'un indicateur métier, garantissant un chiffre cohérent partout — répliquée manuellement en SPARQL et en DAX dans Shop_CI.
+**Métrique gouvernée** — Définition unique d'un indicateur métier, répliquée manuellement en SPARQL et en DAX dans Shop_CI.
  
 ---
  
@@ -34,17 +24,13 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
  
 **Triplet** — Un fait atomique *sujet → relation → objet*.
  
-**SPARQL CONSTRUCT** — Fabrique de nouveaux triplets à partir d'un motif trouvé — le mécanisme de classification.
- 
-**Membre inconnu (graphe)** — `ClientNonIdentifie`, priorité absolue dans les règles de classification.
+**SPARQL CONSTRUCT** — Fabrique de nouveaux triplets à partir d'un motif trouvé.
  
 ---
  
-## Serveur MCP (Model Context Protocol)
+## Serveur MCP
  
 **MCP** — Protocole standard permettant à un agent IA d'appeler des outils externes.
- 
-**Rechargement à la demande** — Relire une source à chaque appel d'outil plutôt qu'au démarrage.
  
 ---
  
@@ -58,34 +44,45 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
  
 ---
  
-## Power BI & intégration BI
+## Orchestration (Dagster)
  
-**ODBC** — Protocole de connexion à une base de données, passage obligé pour DuckDB.
+**Asset** — Objet de données que Dagster sait construire, surveiller et relier à ses dépendances.
  
-**`mart_decisions`** — Table plate réinjectant la classification du graphe.
+**`dbt_assets`** — Découverte automatique des modèles dbt comme assets, via `manifest.json`.
  
-**`.pbip`** — Format de sauvegarde éclatant le modèle en fichiers texte/JSON versionnables.
+**Job / Schedule** — Regroupement d'assets à exécuter ensemble / déclencheur temporel en syntaxe cron.
+ 
+**`DAGSTER_HOME`** — Variable d'environnement fixant la persistance de l'historique des runs.
  
 ---
  
-## Orchestration (Dagster)
+## Power BI & intégration BI
  
-**Asset** — Un objet de données (table, fichier) que Dagster sait construire, surveiller et relier à ses dépendances — l'unité de raisonnement centrale de Dagster, à la différence d'une simple suite de commandes.
+**ODBC** — Protocole de connexion à une base de données.
  
-**`dbt_assets`** — Décorateur de `dagster-dbt` qui découvre automatiquement chaque modèle dbt comme un asset, à partir du `manifest.json` — aucune redéclaration manuelle.
+**`.pbip`** — Format de sauvegarde éclatant le modèle Power BI en fichiers texte/JSON versionnables.
  
-**`DbtCliResource`** — Ressource Dagster qui invoque `dbt` en ligne de commande, en respectant les mêmes flags qu'un run manuel (cible, `--full-refresh`, exclusions).
+---
  
-**Job** — Regroupement d'assets à exécuter ensemble (ex : tout le pipeline dbt en une fois).
+## Conteneurisation (Docker)
  
-**Schedule** — Déclencheur temporel d'un job, défini en syntaxe cron (ex : `0 6 * * *` = chaque jour à 6h) — l'équivalent Dagster d'une tâche planifiée Windows.
+**Image** — Un artefact figé contenant un environnement complet (OS minimal, dépendances, code) — le "plan de construction" d'un conteneur.
  
-**`Definitions`** — L'objet racine qui enregistre ensemble les assets, jobs, schedules et ressources d'un projet Dagster, point d'entrée unique lu par `dagster dev`.
+**Conteneur** — Une instance en cours d'exécution d'une image, isolée du système hôte.
  
-**Import qualifié vs relatif vs absolu (contexte Dagster)** — Dagster résout les modules Python locaux depuis le **répertoire de travail externe**, pas depuis le sous-dossier où vit réellement le fichier — d'où la nécessité d'un import qualifié complet (`from dagster_shop_ci.assets import ...`) plutôt qu'un simple `from assets import ...`.
+**`Dockerfile`** — Fichier texte décrivant, étape par étape, comment construire une image (`FROM`, `COPY`, `RUN`, `CMD`...).
  
-**`DAGSTER_HOME`** — Variable d'environnement fixant l'emplacement persistant de l'historique des runs et de l'état des schedules ; sans elle, Dagster utilise un dossier temporaire effacé à chaque fermeture.
+**`.dockerignore`** — Liste des fichiers/dossiers à exclure lors de la construction de l'image — exactement l'équivalent de `.gitignore`, appliqué à Docker.
  
-**Processus de premier plan** — Un serveur comme `dagster dev` reste attaché au terminal qui l'a lancé ; le fermer (ou fermer VS Code s'il l'héberge) arrête le serveur — comportement normal d'un outil de développement, pas un bug.
+**Couche (layer) Docker** — Chaque instruction du Dockerfile produit une couche mise en cache ; réordonner les instructions (dépendances avant code) évite de réinstaller inutilement à chaque modification du code.
  
-**Conflit de port (`Errno 10048`)** — Erreur signalant qu'un ancien processus (souvent mal arrêté, fenêtre fermée plutôt que Ctrl+C) occupe déjà le port qu'un nouveau serveur tente d'utiliser.
+**Volume monté (`docker run -v`)** — Pont temporaire entre un chemin local et un chemin dans le conteneur, actif uniquement pendant l'exécution — jamais copié dans l'image elle-même.
+ 
+**Secret jamais copié dans l'image** — Principe de sécurité : un secret (clé API, credentials) ne doit jamais apparaître dans une instruction `COPY` ou `ENV` contenant sa vraie valeur, seulement injecté au lancement via un volume.
+ 
+**`SecretsUsedInArgOrEnv`** — Avertissement Docker signalant qu'une variable `ENV`/`ARG` au nom évocateur (ex : `*CREDENTIALS*`) pourrait contenir un secret — à vérifier au cas par cas : un chemin de fichier vers un secret monté n'est pas le secret lui-même.
+ 
+**Image autosuffisante** — Une image qui ne dépend d'aucune configuration externe à l'exécution (hormis les secrets injectés) — ici, `profiles.yml` généré directement dans l'image plutôt que monté depuis l'extérieur.
+ 
+**Reproductibilité multi-environnement** — La preuve qu'un même pipeline produit un résultat identique sur plusieurs environnements totalement indépendants (local, CI/CD, conteneur) — la démonstration la plus forte de fiabilité construite dans Shop_CI.
+ 
