@@ -1,0 +1,28 @@
+# --- ENVIRONNEMENTS ET SECRETS ---
+# Bloque l'environnement virtuel Python de ton Windows (le conteneur créera le sien sous Linux)
+.venv/
+# Masque tes mots de passe et clés secrètes d'API pour ne pas les livrer au client
+.secrets.json
+
+# --- DAGSTER ---
+# Évite d'embarquer la configuration locale et l'historique des runs Dagster de ton PC
+dagster_shop_ci/.dagster_home/
+# Bloque tous les dossiers temporaires générés automatiquement par Dagster
+dagster_shop_ci/.tmp_dagster_home_*/
+
+# --- CACHE PYTHON ---
+# Ignore les fichiers de cache Python inutiles à la production
+**/__pycache__/
+**/*.pyc
+
+# --- VERSIONNING ET LOGS ---
+# Évite d'alourdir le conteneur avec tout l'historique des modifications Git
+.git/
+# N'embarque pas les fichiers de logs (historiques d'erreurs) générés sur ta machine
+logs/
+
+# --- DBT ---
+# Ignore le dossier target de dbt (les fichiers SQL compilés localement seront recréés proprement)
+shop_ci_dbt/target/
+# Bloque les fichiers de métadonnées spécifiques à dbt-owl s'ils sont générés localement
+shop_ci_dbt/owl/*.ttl
