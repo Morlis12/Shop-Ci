@@ -1,0 +1,72 @@
+version: 2
+
+models:
+  - name: sat_client
+    columns:
+      - name: hub_client_hk
+        tests:
+          - relationships:
+              to: ref('hub_client')
+              field: hub_client_hk
+
+  - name: sat_produit
+    columns:
+      - name: hub_produit_hk
+        tests:
+          - relationships:
+              to: ref('hub_produit')
+              field: hub_produit_hk
+
+  - name: link_vente
+    columns:
+      - name: hub_client_hk
+        tests:
+          - relationships:
+              to: ref('hub_client')
+              field: hub_client_hk
+              config:
+                severity: warn
+      - name: hub_produit_hk
+        tests:
+          - relationships:
+              to: ref('hub_produit')
+              field: hub_produit_hk
+              config:
+                severity: warn
+      - name: hub_commande_hk
+        tests:
+          - relationships:
+              to: ref('hub_commande')
+              field: hub_commande_hk
+
+  - name: sat_vente
+    columns:
+      - name: link_vente_hk
+        tests:
+          - relationships:
+              to: ref('link_vente')
+              field: link_vente_hk
+
+  - name: link_paiement
+    columns:
+      - name: hub_commande_hk
+        tests:
+          - relationships:
+              to: ref('hub_commande')
+              field: hub_commande_hk
+
+  - name: sat_paiement
+    columns:
+      - name: link_paiement_hk
+        tests:
+          - relationships:
+              to: ref('link_paiement')
+              field: link_paiement_hk
+
+  - name: link_client_same_as
+    columns:
+      - name: hub_client_hk
+        tests:
+          - relationships:
+              to: ref('hub_client')
+              field: hub_client_hk
