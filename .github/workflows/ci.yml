@@ -42,18 +42,23 @@ jobs:
                 location: US
           EOF
 
-      # 5. Construire et tester (full-refresh, snapshots exclus --
+      # 5. Installer les packages dbt (dbt_utils) -- indispensable
+      #    depuis l'introduction du Data Vault (generate_surrogate_key)
+      - name: Installer les packages dbt
+        working-directory: shop_ci_dbt
+        run: dbt deps
+
+      # 6. Construire et tester (full-refresh, snapshots exclus --
       #    contrainte du palier gratuit BigQuery sans carte bancaire, sans DML/MERGE)
       - name: dbt build
         working-directory: shop_ci_dbt
         run: dbt build --target bigquery_dev --full-refresh --no-partial-parse --exclude path:snapshots
 
-      # 6. Placer la clé de service là où les scripts owl/ l'attendent
-      #    (CLE_JSON = "../.secrets/..." relatif à owl/, donc shop_ci_dbt/.secrets/)
+      # 7. Placer la clé de service la ou les scripts owl/ l'attendent
       - name: Préparer la clé pour les scripts du graphe
         run: cp /tmp/gcp-key.json .secrets.json
 
-      # 7. Générer et classifier le graphe de connaissances
+      # 8. Générer et classifier le graphe de connaissances
       - name: Générer le graphe de connaissances
         working-directory: shop_ci_dbt/owl
         run: |
