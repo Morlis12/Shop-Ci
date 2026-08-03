@@ -1,8 +1,8 @@
 # Shop_CI — Plateforme Analytics Engineering de bout en bout
  
-**dbt · DuckDB · BigQuery · MetricFlow · Power BI · Graphe de connaissances (RDF/OWL/SPARQL) · Serveur MCP · CI/CD GitHub Actions · Dagster · Docker**
+**dbt · DuckDB · BigQuery · MetricFlow · Power BI · Graphe de connaissances (RDF/OWL/SPARQL) · Serveur MCP · CI/CD GitHub Actions · Dagster · Docker · Data Vault**
  
-Projet pédagogique et portfolio construit de A à Z : d'un jeu de données brutes volontairement sales jusqu'à un agent IA capable d'interroger les décisions métier de l'entreprise en langage naturel — avec une chaîne CI/CD complète, une restitution Power BI, une portabilité multi-warehouse, une orchestration moderne, et un pipeline conteneurisé prouvant sa reproductibilité sur trois environnements indépendants.
+Projet pédagogique et portfolio construit de A à Z : d'un jeu de données brutes volontairement sales jusqu'à un agent IA capable d'interroger les décisions métier de l'entreprise en langage naturel — avec une chaîne CI/CD complète, une restitution Power BI, une portabilité multi-warehouse, une orchestration moderne, un pipeline conteneurisé, et deux modélisations coexistantes (Kimball et Data Vault) pour la même donnée source.
  
 > Statut : document vivant, mis à jour au fil de l'avancement du projet.
  
@@ -10,9 +10,9 @@ Projet pédagogique et portfolio construit de A à Z : d'un jeu de données brut
  
 ## 1. Contexte
  
-**BoutiqueCI** est une entreprise e-commerce fictive basée à Abidjan, vendant des produits artisanaux en Côte d'Ivoire et en Europe. Le projet simule un cas réel d'analytics engineering, avec ses pièges volontaires pour s'exercer sur des problèmes authentiques plutôt que des données déjà propres.
+**BoutiqueCI** est une entreprise e-commerce fictive basée à Abidjan. Le projet simule un cas réel d'analytics engineering, avec ses pièges volontaires pour s'exercer sur des problèmes authentiques plutôt que des données déjà propres.
  
-**Répartition des rôles pendant la construction** : Claude écrit et teste le code, explique chaque décision ; l'architecte du projet audite, challenge, valide et tranche les choix métier.
+**Répartition des rôles** : Claude écrit et teste le code, explique chaque décision ; l'architecte du projet audite, challenge, valide et tranche les choix métier.
  
 ---
  
@@ -22,38 +22,31 @@ Projet pédagogique et portfolio construit de A à Z : d'un jeu de données brut
 CSV bruts (data_brute/)
         │
         ▼
-  INGESTION — charger_csv_bigquery.py (mini-Fivetran maison, all-STRING)
+  INGESTION — charger_csv_bigquery.py
         │
         ▼
-  STAGING (vues)          — nettoyage 1-pour-1, typage, flags
-        │                    portable DuckDB ↔ BigQuery (macros dbt.*)
-        ▼
-  INTERMEDIATE            — logique inter-tables (réconciliation clients)
+  STAGING (vues)          — nettoyage 1-pour-1, portable DuckDB ↔ BigQuery
         │
-        ▼
-  MARTS (Kimball)          — dim_clients, dim_produits, dim_calendrier,
-        │                     fait_ventes, fait_paiements
-        ├──► SEMANTIC LAYER (MetricFlow) — métriques gouvernées (ca_officiel...)
+        ├──► INTERMEDIATE → MARTS (Kimball)          — restitution rapide
+        │         dim_clients, fait_ventes...            et intuitive
         │
-        ├──► MARTS DE DÉCISION — mart_decision_clients, mart_decision_produits
-        │           │
-        │           ▼
-        │     GRAPHE DE CONNAISSANCES (RDF/OWL/SPARQL, sur BigQuery)
-        │           │
-        │           ├──► SERVEUR MCP (4 outils) ──► Claude Desktop (agent IA)
-        │           │
-        │           └──► mart_decisions ──► POWER BI (ODBC, DAX)
+        └──► DATA VAULT (models/vault/)              — audit et traçabilité
+                  ├── hubs/       (client, produit, commande)
+                  ├── links/      (vente, paiement, client_same_as)
+                  └── satellites/ (contexte + hash_diff)
  
-REPRODUCTIBILITÉ VALIDÉE SUR 3 ENVIRONNEMENTS INDÉPENDANTS :
-  Local (Windows)  →  CI/CD (GitHub Actions, machine vierge)  →  Docker (conteneur isolé)
-  Résultat identique dans les 3 cas : PASS=79 WARN=1 (101 commandes orphelines, connu) ERROR=0
+        Les deux modélisations partagent le MÊME staging, mais ne se
+        construisent JAMAIS l'une depuis l'autre — le Data Vault repart
+        systématiquement de la source brute, pour ne jamais hériter
+        silencieusement d'une décision métier déjà prise par Kimball.
  
-ORCHESTRATION — 3 niveaux de maturité :
-  Niveau 1 — pipeline_quotidien.ps1 (Windows Task Scheduler, local)
-  Niveau 2 — CI/CD GitHub Actions (build/test/graphe sur chaque PR, branche protégée)
-  Niveau 3 — Dagster OSS (assets dbt auto-découverts, job + schedule quotidien)
+        ├──► SEMANTIC LAYER (MetricFlow) — métriques gouvernées
+        ├──► GRAPHE DE CONNAISSANCES (RDF/OWL/SPARQL, sur BigQuery)
+        │         ├──► SERVEUR MCP ──► Claude Desktop (agent IA)
+        │         └──► mart_decisions ──► POWER BI
  
-WAREHOUSES SUPPORTÉS : DuckDB (local, prototypage) et BigQuery (bigquery_dev / bigquery_prod)
+REPRODUCTIBILITÉ VALIDÉE SUR 3 ENVIRONNEMENTS : Local · CI/CD · Docker
+ORCHESTRATION — 3 niveaux : PowerShell · GitHub Actions · Dagster OSS
 ```
  
 ---
@@ -62,64 +55,53 @@ WAREHOUSES SUPPORTÉS : DuckDB (local, prototypage) et BigQuery (bigquery_dev / 
  
 ```
 Shop Ci/
-├── .github/workflows/ci.yml      # CI GitHub Actions
-├── .dockerignore                  # exclut secrets, venv, caches de l'image Docker
-├── Dockerfile                     # image du pipeline, autosuffisante
-├── .secrets.json                  # clé de service BigQuery (gitignoré)
-├── charger_csv_bigquery.py        # ingestion CSV → tables BigQuery
+├── .github/workflows/ci.yml
+├── Dockerfile · .dockerignore
+├── .secrets.json                  # gitignoré
+├── charger_csv_bigquery.py
 ├── dagster_shop_ci/
-│   └── dagster_shop_ci/
-│       ├── assets.py              # dbt_assets (auto-découverte) + job
-│       ├── definitions.py         # Definitions + schedule quotidien
-│       └── __init__.py
 ├── shop_ci_dbt/
-│   ├── models/{staging,intermediate,marts}/
-│   ├── macros/                    # nettoyer_date.sql, generate_schema_name.sql
-│   ├── snapshots/                 # SCD Type 2
-│   ├── owl/                       # graphe de connaissances (généré, gitignoré)
-│   ├── powerbi/Shop_CI.pbip       # modèle Power BI versionné
+│   ├── packages.yml                # dbt-utils (generate_surrogate_key)
+│   ├── models/
+│   │   ├── staging/                 # source commune aux deux modélisations
+│   │   ├── intermediate/            # réconciliation clients (Kimball)
+│   │   ├── marts/                   # dimensions, faits (Kimball)
+│   │   └── vault/                   # Data Vault (Hub/Link/Satellite)
+│   │       ├── hubs/
+│   │       ├── links/
+│   │       ├── satellites/
+│   │       └── _tests_vault.yml
+│   ├── macros/
+│   ├── snapshots/
+│   ├── owl/
+│   ├── powerbi/Shop_CI.pbip
 │   └── dbt_project.yml
-├── mcp/serveur_mcp.py             # serveur MCP (4 outils)
-├── data_brute/                    # sources CSV versionnées
-├── tests_pedagogiques/            # 18 tests HTML interactifs
-├── pipeline_quotidien.ps1         # orchestration Windows (niveau 1)
+├── mcp/serveur_mcp.py
+├── data_brute/
+├── tests_pedagogiques/
+├── pipeline_quotidien.ps1
 ├── requirements.txt
-└── logs/                          # journaux d'exécution (gitignoré)
+└── logs/
 ```
  
 ---
  
 ## 4. Fonctionnalités livrées
  
-### Pipeline dbt
-Staging, intermediate, marts Kimball, 63+ tests, contrats de modèle, snapshots SCD2, modèles incrémentaux — grain explicite, membre inconnu toujours conservé.
+### Pipeline dbt (Kimball)
+Staging, intermediate, marts, 63+ tests, contrats de modèle, snapshots SCD2, modèles incrémentaux.
  
-### Portabilité multi-warehouse (DuckDB ↔ BigQuery)
-Macros cross-database dbt (`type_string`, `safe_cast`, `split_part`, `dateadd`), routage conditionnel Jinja pour les cas sans équivalent générique, environnements dev/prod sur le même moteur.
+### Data Vault (nouveau)
+- **3 Hubs** (`hub_client`, `hub_produit`, `hub_commande`) : identité pure, hash key calculée via `dbt_utils.generate_surrogate_key`, business key, `load_date`, `record_source`. `hub_client` couvre volontairement les **510 identités brutes** (avant le dédoublonnage de `stg_clients`), pas seulement les 500 survivants — un Hub ne fait jamais disparaître une identité rencontrée, même une identité qui s'avère être un doublon.
+- **3 Links** : `link_vente` (N-aire, relie les 3 Hubs, grain d'une ligne de vente), `link_paiement` (rattaché au seul `hub_commande`, inclut les tentatives en retry), `link_client_same_as` (documente explicitement les 10 doublons clients de façon traçable et réversible, sans jamais fusionner silencieusement — contrairement à `int_correspondance_clients` côté Kimball, qui fait la même réconciliation mais en l'appliquant directement).
+- **5 Satellites** : contexte descriptif + `hash_diff` (détection de changement), reconstruits systématiquement depuis la **source brute**, jamais depuis un mart Kimball déjà décidé — y compris `sat_client`, qui recalcule lui-même `nom_complet` (concaténation prénom+nom) plutôt que d'hériter de `stg_clients`.
+- **9 tests d'intégrité** (`relationships` sur chaque hash key) : 8 PASS, 1 WARN documenté — 91 vraies commandes orphelines (référençant un `id_client` qui n'a jamais existé, même en brut), un chiffre plus précis que les 101 connus côté Kimball, qui mélangeaient doublons éliminés et vrais orphelins.
+- **Coexiste avec Kimball**, sans le remplacer — les deux modélisations restent disponibles, chacune répondant à un besoin différent (restitution rapide vs audit/traçabilité).
+### Portabilité multi-warehouse, Orchestration (3 niveaux), CI/CD, Conteneurisation
+Voir chapitres précédents — inchangés par ce chantier.
  
-### Semantic Layer (MetricFlow)
-6 métriques gouvernées, dont `ca_officiel`.
- 
-### Orchestration — 3 niveaux
-Local (PowerShell) → CI/CD (GitHub Actions) → Dagster OSS (assets auto-découverts, lineage visuel, schedule cron).
- 
-### CI/CD (GitHub Actions)
-Machine vierge à chaque Pull Request, branche protégée, génération complète du graphe incluse.
- 
-### Conteneurisation (Docker)
-- **Image autosuffisante** : le profil dbt (`profiles.yml`) est généré directement dans l'image au moment du build — le conteneur n'a besoin d'aucun fichier de configuration externe pour fonctionner, seulement de la clé BigQuery.
-- **Secret jamais copié dans l'image** : la clé de service est injectée exclusivement au lancement via `docker run -v` (volume monté), jamais via `COPY` — vérifié concrètement par une recherche exhaustive à l'intérieur de l'image construite, pas seulement supposé.
-- **Mise en cache des couches** : `requirements.txt` copié et installé avant le reste du code, pour que Docker ne réinstalle jamais les dépendances lors d'une simple modification d'un modèle `.sql`.
-- **`.dockerignore` strict** : exclut secrets, environnement virtuel, caches Dagster/Python, cibles dbt déjà compilées.
-- **Validé en conditions réelles** : `dbt build --target bigquery_dev` complet depuis le conteneur, résultat rigoureusement identique au run local et à la CI (`PASS=79 WARN=1 ERROR=0`).
-### Graphe de connaissances
-4 fichiers (ontologie / export / classification / réinjection), sur BigQuery. 499 clients et 20 produits classifiés.
- 
-### Serveur MCP
-4 outils exposés à un agent IA (Claude Desktop).
- 
-### Power BI
-Connexion ODBC, mesures DAX répliquant le semantic layer, format `.pbip` versionnable.
+### Graphe de connaissances, Serveur MCP, Power BI
+Inchangés — branchés sur les marts Kimball, pas (encore) sur le Data Vault.
  
 ---
  
@@ -131,49 +113,39 @@ python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -r requirements.txt
  
-# --- Pipeline dbt (BigQuery, en local) ---
-python charger_csv_bigquery.py
 cd shop_ci_dbt
-dbt build --target bigquery_dev --full-refresh --no-partial-parse --exclude path:snapshots
+dbt deps   # installe dbt_utils
  
-# --- Graphe de connaissances ---
-cd owl
-python 01_schema.py && python 02_export.py && python 03_classify.py && python 04_ecrire_labels_BigQuery.py
+# --- Pipeline Kimball ---
+dbt build --select marts staging intermediate --target bigquery_dev --full-refresh --exclude path:snapshots
  
-# --- Orchestration Dagster ---
-cd ..\..\dagster_shop_ci
-dagster dev -f dagster_shop_ci\definitions.py   # puis http://127.0.0.1:3000
+# --- Data Vault ---
+dbt build --select vault --target bigquery_dev --full-refresh --exclude path:snapshots
+dbt test --select vault --target bigquery_dev
  
-# --- Exécution conteneurisée (Docker) ---
-cd ..
-docker build -t shop-ci-pipeline .
-docker run --rm -v "$(pwd)\.secrets.json:/app/.secrets.json" shop-ci-pipeline
- 
-# --- CI/CD : automatique sur chaque Pull Request vers main ---
+# --- Graphe, Dagster, Docker, CI/CD : voir chapitres précédents ---
 ```
  
 ---
  
 ## 6. Limitations connues et décisions assumées
  
-- **Palier gratuit BigQuery sans DML/MERGE** : `--full-refresh --exclude path:snapshots` appliqué uniformément sur les 4 modes d'exécution (manuel, CI, Dagster, Docker).
-- **Le graphe (`owl/`) n'est pas encore conteneurisé ni intégré comme assets Dagster** : reste exécuté manuellement en dehors de ces deux chantiers — une extension possible, non encore réalisée.
-- **Le profil dbt est généré en dur dans le Dockerfile** (sans secret réel, juste la structure de connexion) plutôt que monté depuis l'extérieur — choix délibéré pour une image autosuffisante, au prix d'une modification du Dockerfile si la configuration de connexion change.
-- **Avertissement Docker `SecretsUsedInArgOrEnv`** sur la ligne `ENV GOOGLE_APPLICATION_CREDENTIALS` : un faux positif vérifié — cette variable ne contient qu'un chemin de fichier, jamais le secret lui-même ; confirmé par une recherche exhaustive à l'intérieur de l'image construite.
-- **MetricFlow non invocable en sous-processus depuis le serveur MCP** : contournement documenté via calcul SPARQL direct sur le graphe.
-- **Trois consommateurs, une seule vérité — mais reproduite, pas partagée** : `ca_officiel` défini une fois, répliqué manuellement en DAX et en SPARQL.
-- **Dagster tourne en processus de premier plan**, lié au terminal qui l'a lancé.
+- **Le Data Vault n'est pas (encore) branché sur le graphe, MCP, ou Power BI** — ces trois consommateurs restent sur les marts Kimball ; brancher le Data Vault dessus est une extension possible, non réalisée.
+- **`hash_diff` calculé mais jamais exploité en historisation réelle** : avec un seul chargement de données, aucun Satellite n'a encore eu l'occasion de détecter un vrai changement — la mécanique est en place, sa valeur apparaîtra avec de vrais rechargements répétés.
+- **Le Data Vault duplique une partie de la logique de nettoyage déjà présente en staging** (concaténation nom+prénom, cast des prix) plutôt que de la réutiliser — un compromis assumé : partir de la source brute protège contre l'héritage de décisions de *périmètre* (suppression, fusion), au prix de dupliquer les nettoyages *techniques* purs.
+- **`link_client_same_as` documente la réconciliation sans jamais l'appliquer** — contrairement à Kimball, où `int_correspondance_clients` fusionne directement. Une future couche de restitution devrait explicitement consulter ce Link pour regrouper les identités si besoin.
+- Voir les chapitres précédents pour les limitations BigQuery, Dagster, Docker déjà documentées.
 ---
  
 ## 7. Feuille de route
  
-- [ ] Data Vault — chantier théorique exploré, implémentation réelle à mener
-- [ ] Intégrer le graphe (`owl/`) à l'image Docker et/ou comme assets Dagster
-- [ ] Activer le schedule Dagster (actuellement configuré mais désactivé par défaut)
+- [ ] MCP Power BI officiel (Microsoft) — connecter simultanément le serveur MCP Shop_CI et le serveur MCP Power BI Modeling
+- [ ] Superset — restitution BI open source, alternative à Power BI
+- [ ] OpenClaw — diffusion proactive de KPI et interrogation conversationnelle via Telegram (WhatsApp en extension prudente)
+- [ ] Brancher le graphe/MCP/Power BI sur le Data Vault, en complément des marts Kimball
 - [ ] Étendre `calculer_metrique` (MCP) pour couvrir `marge`
 - [ ] Gouvernance/RGPD — application concrète non commencée
-- [ ] Activer la facturation BigQuery (palier gratuit permanent) pour lever la contrainte DML/MERGE
-- [ ] Serveurs MCP officiels Power BI (Microsoft) — piste explorée, non implémentée
+- [ ] Second projet dédié : packages dbt pour la certification (`dbt_expectations`, `dbt_project_evaluator`, `codegen`)
 ---
  
-*Voir aussi : [WRITE_UP.md](./WRITE_UP.md), [DICTIONNAIRE.md](./DICTIONNAIRE.md), et [tests_pedagogiques/](./tests_pedagogiques/) pour 19 modules de révision interactifs.*
+*Voir aussi : [WRITE_UP.md](./WRITE_UP.md), [DICTIONNAIRE.md](./DICTIONNAIRE.md), et [tests_pedagogiques/](./tests_pedagogiques/).*

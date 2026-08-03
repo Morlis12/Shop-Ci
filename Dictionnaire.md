@@ -4,13 +4,37 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
  
 ---
  
-## dbt & modélisation
+## dbt & modélisation générale
  
 **Modèle** — Une table ou vue produite par dbt.
  
-**Membre inconnu (Unknown Member)** — Ligne spéciale (id = -1) accueillant les faits à clé étrangère orpheline.
+**Membre inconnu (Unknown Member)** — Ligne spéciale (id = -1) accueillant les faits à clé étrangère orpheline, convention Kimball.
  
 **Macro cross-database** — Fonction Jinja traduite automatiquement selon la cible active (DuckDB, BigQuery).
+ 
+---
+ 
+## Data Vault (Hub / Link / Satellite)
+ 
+**Hub** — Table contenant l'identité pure d'un concept métier ayant une existence indépendante (Client, Produit, Commande) : hash key, business key, `load_date`, `record_source` — jamais d'attribut descriptif.
+ 
+**Test du "nom commun"** — Critère de choix d'un Hub : *"cette chose peut-elle exister et avoir un sens même si rien d'autre ne lui était jamais associé ?"* Si oui → Hub. Si l'existence dépend de la rencontre d'autres entités → Link.
+ 
+**Link** — Table documentant une relation entre plusieurs Hubs (N-aire si plus de deux), au grain d'un événement (une vente, un paiement) ou d'une décision de rapprochement (same-as) — jamais de mesure.
+ 
+**Link same-as** — Type de Link documentant qu'une entité doit être rapprochée d'une autre (ex. : deux `id_client` désignant la même personne), sans jamais fusionner les identités concernées — contrairement à une réconciliation Kimball classique, qui applique directement le rapprochement dans les marts finaux.
+ 
+**Satellite** — Table portant le contexte descriptif (attributs qui varient) rattaché à un Hub ou un Link, avec un `hash_diff` permettant de détecter un changement entre deux chargements.
+ 
+**`hash_diff`** — Hash calculé sur l'ensemble des attributs descriptifs d'un Satellite, recalculé à chaque étape d'ajout de colonne — sert à détecter efficacement si quelque chose a changé, sans comparer colonne par colonne.
+ 
+**`dbt_utils.generate_surrogate_key([...])`** — Macro du package `dbt-utils` calculant une hash key déterministe à partir d'une ou plusieurs colonnes : la même entrée produit toujours le même hash, permettant des jointures stables entre Hubs, Links et Satellites.
+ 
+**Data Vault part toujours du staging, jamais des marts** — Règle centrale : un mart Kimball contient déjà des décisions métier accumulées (re-routage, exclusions) ; construire le Data Vault par-dessus reviendrait à en hériter silencieusement plutôt que de garantir une couche d'audit indépendante.
+ 
+**`load_date` / `record_source`** — Métadonnées obligatoires sur chaque table Data Vault : quand la ligne a été chargée, et de quel système source elle provient.
+ 
+**Coexistence Kimball / Data Vault** — Les deux modélisations partagent le même staging mais restent indépendantes l'une de l'autre, répondant à des besoins différents (restitution rapide vs audit et traçabilité) plutôt que l'une remplaçant l'autre.
  
 ---
  
@@ -36,53 +60,23 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
  
 ## CI/CD (GitHub Actions)
  
-**Workflow** — Fichier YAML décrivant quand et comment exécuter des tâches automatisées.
- 
-**Runner** — Machine virtuelle vierge prêtée par GitHub, détruite après chaque run.
- 
-**Règle de protection de branche** — Rend un status check obligatoire avant fusion.
+**Workflow / Runner / Règle de protection de branche** — Voir chapitres précédents.
  
 ---
  
 ## Orchestration (Dagster)
  
-**Asset** — Objet de données que Dagster sait construire, surveiller et relier à ses dépendances.
- 
-**`dbt_assets`** — Découverte automatique des modèles dbt comme assets, via `manifest.json`.
- 
-**Job / Schedule** — Regroupement d'assets à exécuter ensemble / déclencheur temporel en syntaxe cron.
- 
-**`DAGSTER_HOME`** — Variable d'environnement fixant la persistance de l'historique des runs.
- 
----
- 
-## Power BI & intégration BI
- 
-**ODBC** — Protocole de connexion à une base de données.
- 
-**`.pbip`** — Format de sauvegarde éclatant le modèle Power BI en fichiers texte/JSON versionnables.
+**Asset / `dbt_assets` / Job / Schedule / `DAGSTER_HOME`** — Voir chapitre Dagster.
  
 ---
  
 ## Conteneurisation (Docker)
  
-**Image** — Un artefact figé contenant un environnement complet (OS minimal, dépendances, code) — le "plan de construction" d'un conteneur.
+**Image / Conteneur / `Dockerfile` / `.dockerignore` / Volume monté / Secret jamais copié dans l'image** — Voir chapitre Docker.
  
-**Conteneur** — Une instance en cours d'exécution d'une image, isolée du système hôte.
+---
  
-**`Dockerfile`** — Fichier texte décrivant, étape par étape, comment construire une image (`FROM`, `COPY`, `RUN`, `CMD`...).
+## Power BI & intégration BI
  
-**`.dockerignore`** — Liste des fichiers/dossiers à exclure lors de la construction de l'image — exactement l'équivalent de `.gitignore`, appliqué à Docker.
- 
-**Couche (layer) Docker** — Chaque instruction du Dockerfile produit une couche mise en cache ; réordonner les instructions (dépendances avant code) évite de réinstaller inutilement à chaque modification du code.
- 
-**Volume monté (`docker run -v`)** — Pont temporaire entre un chemin local et un chemin dans le conteneur, actif uniquement pendant l'exécution — jamais copié dans l'image elle-même.
- 
-**Secret jamais copié dans l'image** — Principe de sécurité : un secret (clé API, credentials) ne doit jamais apparaître dans une instruction `COPY` ou `ENV` contenant sa vraie valeur, seulement injecté au lancement via un volume.
- 
-**`SecretsUsedInArgOrEnv`** — Avertissement Docker signalant qu'une variable `ENV`/`ARG` au nom évocateur (ex : `*CREDENTIALS*`) pourrait contenir un secret — à vérifier au cas par cas : un chemin de fichier vers un secret monté n'est pas le secret lui-même.
- 
-**Image autosuffisante** — Une image qui ne dépend d'aucune configuration externe à l'exécution (hormis les secrets injectés) — ici, `profiles.yml` généré directement dans l'image plutôt que monté depuis l'extérieur.
- 
-**Reproductibilité multi-environnement** — La preuve qu'un même pipeline produit un résultat identique sur plusieurs environnements totalement indépendants (local, CI/CD, conteneur) — la démonstration la plus forte de fiabilité construite dans Shop_CI.
+**ODBC / `.pbip` / Mesure DAX** — Voir chapitres précédents.
  
