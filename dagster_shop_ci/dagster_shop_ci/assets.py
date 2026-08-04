@@ -2,14 +2,17 @@
 from dagster import AssetExecutionContext ,define_asset_job
 # Importations spécifiques pour piloter dbt en ligne de commande (Cli) et générer les assets
 from dagster_dbt import DbtCliResource, dbt_assets
-
+import os
 # Chemin absolu vers le répertoire racine de votre projet dbt (contient dbt_project.yml)
 # Le 'r' devant la chaîne évite que les antislashs '\' soient interprétés comme des caractères d'échappement par Windows
-DBT_PROJECT_DIR = r"C:\Users\Laptop Studio\Documents\Shop Ci\shop_ci_dbt"
+DBT_PROJECT_DIR = os.environ.get(
+    "DBT_PROJECT_DIR",
+    r"C:\Users\Laptop Studio\Documents\Shop Ci\shop_ci_dbt"
+)
 
 # Chemin vers le fichier manifest.json généré par 'dbt parse' ou 'dbt compile'
 # Ce fichier contient la carte d'identité (le DAG) de tous vos modèles dbt
-MANIFEST_PATH = DBT_PROJECT_DIR + r"\target\manifest.json"
+MANIFEST_PATH = os.path.join(DBT_PROJECT_DIR, "target", "manifest.json")
 
 
 # Ce décorateur demande à Dagster de lire le manifest.json pour créer automatiquement

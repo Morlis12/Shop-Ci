@@ -1,3 +1,83 @@
+
+Claude a terminé la réponse.
+Question fondamentale, et la réponse est oui — sans détour ni faux espoir, il faut être clair là-dessus.
+
+Le vrai principe, incontournable, quel que soit l'outil (Docker, Dagster, un serveur classique) : un conteneur Docker est un processus qui tourne sur ta machine. Si la machine s'éteint, ou si Docker Desktop est fermé, tout ce qui tourne dedans s'arrête aussi — le daemon Dagster, le serveur web, tout. Il n'y a pas de mode "orchestration qui continue même ordinateur éteint" possible avec cette architecture, ce n'est techniquement pas envisageable.
+
+Pourquoi c'est différent de la CI GitHub Actions
+Souviens-toi : GitHub Actions fonctionnait indépendamment de ta machine parce que GitHub héberge lui-même le serveur qui exécute tes workflows — ce n'est jamais ton PC qui tourne, mais une machine chez GitHub. Ton conteneur Docker actuel, lui, tourne physiquement sur ton ordinateur — donc il dépend entièrement de sa disponibilité.
+
+Les vraies solutions, si tu veux une orchestration qui tourne 24/7 sans dépendre de ta machine
+Option A — Héberger le conteneur sur un serveur cloud toujours allumé. Un petit VPS (par exemple sur OVH, DigitalOcean, ou même une VM légère sur Google Cloud, cohérent avec ton usage BigQuery déjà en place), où tu déploies exactement ce même conteneur Docker — mais cette fois sur une machine qui tourne en permanence, pas la tienne. Le principe technique ne change pas, juste où le conteneur vit physiquement.
+
+Option B — Dagster+ (le service cloud managé), qu'on avait volontairement écarté au début pour rester sur Dagster OSS gratuit — c'est littéralement le produit commercial pensé pour ce besoin exact : héberger le daemon et l'orchestration sans jamais dépendre d'une machine personnelle.
+
+Option C — Une tâche planifiée cloud plus simple, sans même Dagster : un Cloud Scheduler (Google Cloud, cohérent avec ton usage BigQuery) qui déclenche directement un job ponctuel (par exemple, un Cloud Run exécutant dbt build) à heure fixe — moins riche en observabilité que Dagster, mais bien plus simple et économique pour un besoin strictement "tourner tous les jours à 6h".
+
+Ce qu'il faut retenir pour l'usage actuel de Shop_CI
+Ce qu'on vient de construire est correct et complet pour la démonstration et l'apprentissage — un conteneur autonome, orchestration automatique tant qu'il tourne. Documenter honnêtement cette limite (comme on l'a fait pour toutes les autres) est la bonne approche, plutôt que de prétendre à une continuité 24/7 qu'on n'a pas réellement construite.
+
+Veux-tu qu'on documente cette limite maintenant dans le README (cohérent avec notre discipline habituelle), ou qu'on explore une des trois options d'hébergement cloud tout de suite ? 🔧
+
+oui ajoutons
+
+
+Orchestrated targeted documentation updates for Docker-Dagster integration
+Orchestrated targeted documentation updates for Docker-Dagster integration
+Numérotation cassée — corrigeons ça proprement avant de continuer.
+
+
+Corriger la numérotation séquentielle des sections
+Corriger la numérotation séquentielle des sections
+Numérotation propre maintenant. Ajoutons aussi la limitation dans la section 6 et une entrée dans la feuille de route.
+
+
+2 fichiers modifiés
+2 fichiers modifiés
+Ajoutons maintenant le récit dans le WRITE_UP et les termes dans le DICTIONNAIRE.
+
+
+2 fichiers modifiés, a exécuté une commande, lu un fichier
+2 fichiers modifiés, a exécuté une commande, lu un fichier
+Les trois documents sont à jour, avec des ajouts ciblés cette fois plutôt qu'une réécriture complète — cohérent avec ta remarque précédente, chaque section reste entière, rien n'a été résumé.
+
+Ce qui a été ajouté précisément :
+
+README — nouvelle section 4.6 (Dagster embarqué dans Docker), renumérotation propre des sections suivantes (4.7 à 4.12), une nouvelle limitation honnête en section 6, une nouvelle ligne en feuille de route
+WRITE_UP — Partie 12 complète, racontant fidèlement la chaîne d'erreurs (chemin mal formé, manifest absent au build, faute de frappe .ynl/.yaml) et la distinction dev/production qui s'est révélée nécessaire
+DICTIONNAIRE — 6 nouveaux termes (dagster-daemon, dagster.yaml, génération runtime du manifest, chemin portable, orchestration liée à la machine hôte)
+Commit :
+
+powershell
+cd "C:\Users\Laptop Studio\Documents\Shop Ci"
+git add README.md WRITE_UP.md DICTIONNAIRE.md
+git status
+powershell
+git commit -m "Documentation : Dagster embarque dans Docker + limitation hebergement" -m "- Nouveau chapitre : daemon + webserver embarques dans le conteneur, service autonome plutot qu'execution ponctuelle
+- Chaine de corrections documentee : chemin portable os.path.join, generation du manifest au runtime, dagster.yaml au bon emplacement, faute de frappe d'extension
+- Limitation honnete ajoutee : l'orchestration Docker depend de la machine hote, contrairement a la CI GitHub Actions -- continuite 24/7 non implementee, prochaine etape identifiee"
+git push
+Une fois poussé, on passe enfin à Superset ? 🔧
+
+
+Readme
+Document · MD 
+
+Write up
+Document · MD 
+
+Dictionnaire
+Document · MD 
+
+
+docker stop 6e57eb8b4c16
+
+
+
+Claude est une IA et peut faire des erreurs. Veuillez vérifier les réponses.
+
+
+Dictionnaire · MD
 # Dictionnaire — Shop_CI
  
 Glossaire des termes techniques employés dans le projet, organisé par domaine. Document vivant, complété au fil des chantiers.
@@ -209,6 +289,22 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
 **Connexion XMLA locale** — Protocole utilisé par le serveur Modeling MCP pour dialoguer avec Power BI Desktop.
  
 **Vérification croisée de cohérence** — Comparer un même résultat calculé indépendamment par deux systèmes distincts (SPARQL sur le graphe vs DAX sur Power BI) pour confirmer que la gouvernance tient, sans pour autant synchroniser leurs définitions.
+ 
+---
+ 
+## Orchestration en production (Dagster dans Docker)
+ 
+**`dagster dev` vs production** — `dagster dev` combine serveur web et exécution en un seul processus de développement ; son schedule ne se déclenche que si ce mode reste actif. La production sépare `dagster-daemon` (déclenchement réel des schedules) et `dagster-webserver` (supervision optionnelle).
+ 
+**`dagster-daemon`** — Le processus qui vérifie en continu si un schedule doit se déclencher, indépendamment de toute interface web consultée ou non — le vrai moteur de l'automatisation, pas l'interface.
+ 
+**`dagster.yaml`** — Fichier de configuration d'instance Dagster (distinct de `definitions.py`), déclarant notamment le `DagsterDaemonScheduler` et le `QueuedRunCoordinator` ; doit vivre à l'emplacement pointé par `DAGSTER_HOME`, pas dans le dossier du projet.
+ 
+**Génération du manifest au runtime, pas au build** — `manifest.json` ne peut être généré qu'au lancement du conteneur (`docker run`), jamais pendant `docker build`, car les secrets (clé BigQuery) ne sont injectés qu'à l'exécution.
+ 
+**Chemin portable (`os.environ.get` + `os.path.join`)** — Pattern permettant à un même script Python de fonctionner correctement en local (chemin Windows de repli) et dans un conteneur (variable `ENV` Docker), sans jamais casser l'un des deux environnements.
+ 
+**Orchestration liée à la machine hôte** — Contrairement à une CI hébergée par un tiers (GitHub Actions), un conteneur Docker tourne physiquement sur la machine qui l'exécute : l'éteindre arrête l'orchestration. Une continuité 24/7 exige un hébergement cloud dédié (VPS, service managé, Cloud Scheduler).
  
 ---
  

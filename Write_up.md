@@ -216,6 +216,24 @@ La création de `ca_clients_vip`, combinant `ca_officiel` et la classification d
  
 ---
  
+## Partie 12 — Embarquer Dagster dans Docker : du pipeline isolé au service autonome
+ 
+### Une question simple qui a révélé une architecture incomplète
+ 
+Une question posée directement — *"est-ce que Dagster est dans l'image qu'on a créée ?"* — a immédiatement révélé que non : l'image Docker construite au chapitre précédent n'exécutait que `dbt build` une fois, puis s'arrêtait. Dagster continuait de tourner uniquement en local, pointant vers un chemin Windows codé en dur, jamais connecté au conteneur. Le principe produit énoncé ensuite — *"le client ne doit rien avoir à faire que consommer les données transformées"* — a clarifié l'objectif réel : le conteneur devait devenir un service persistant, pas une exécution ponctuelle.
+ 
+### Une chaîne de petites erreurs, chacune corrigée par vérification plutôt que supposition
+ 
+Rendre `DBT_PROJECT_DIR` portable entre Windows et Linux a semé la confusion sur le fonctionnement de `os.environ.get(...)` — clarifié précisément : la valeur de repli codée en dur ne sert que si la variable d'environnement n'existe nulle part, jamais un mélange des deux. Le premier lancement a échoué sur un chemin de manifest mal formé (`/app/shop_ci_dbt\target\manifest.json`, un mélange de séparateurs `/` et `\` provenant d'une concaténation de chaîne littérale), corrigé par `os.path.join`, portable par construction. Un deuxième échec a révélé que `manifest.json` n'existait tout simplement jamais dans l'image, pour une raison structurelle : il ne peut être généré qu'au lancement du conteneur, jamais pendant le build, puisque la clé BigQuery n'est disponible qu'à l'exécution.
+ 
+Une fois Dagster démarré, un avertissement resté silencieusement ignoré deux fois de suite (`No dagster instance configuration file`) a fini par se révéler être une simple faute de frappe sur l'extension d'un fichier (`.ynl` au lieu de `.yaml`) — un rappel que même une erreur qui semble structurelle peut avoir une cause aussi triviale qu'une faute de frappe, découverte uniquement parce que le fichier source a été vérifié directement sur le disque plutôt que supposé correct.
+ 
+### Développeur vs production : une distinction qui n'avait jamais été posée jusque-là
+ 
+Le chantier a mis au jour une distinction restée implicite depuis le tout premier chapitre Dagster : `dagster dev` combine serveur web et exécution en un seul processus, pratique pour développer, mais son schedule ne se déclenche que si ce mode reste actif. La vraie architecture de production sépare les deux : un `dagster-daemon` qui vérifie en continu si un schedule doit se déclencher, indépendamment de toute interface consultée ou non, et un `dagster-webserver` optionnel pour la supervision humaine. Cette distinction, une fois posée, a immédiatement soulevé une dernière question, honnête et nécessaire : le daemon tournant dans un conteneur Docker reste un processus local — contrairement à la CI GitHub Actions, hébergée indépendamment par GitHub, ce service s'arrête dès que la machine qui l'héberge s'éteint. Une vraie continuité 24/7 n'a pas été construite à ce stade ; elle a été nommée et documentée comme la prochaine étape naturelle, pas comme un problème résolu par accident.
+ 
+---
+ 
 ## Ce que ce projet démontre
  
 Au-delà de l'empilement technique, ce projet est une démonstration de méthode : auditer avant de transformer, gouverner une définition avant de la multiplier, documenter une décision plutôt que la cacher — et, chapitre après chapitre, reconnaître qu'un même symptôme peut cacher des causes de nature radicalement différente. La CI a rappelé qu'un système qui tourne chez son créateur ne prouve rien tant qu'il ne tourne pas identiquement ailleurs. Docker a poussé cette preuve à son terme. Le Data Vault a montré qu'une règle qu'on vient de poser mérite d'être vérifiée sur son premier cas concret, pas simplement appliquée de mémoire. Le chantier MCP Power BI, en clôture, a rappelé la discipline la plus simple et la plus souvent négligée : savoir reconnaître, avant de démontrer quoi que ce soit, la différence entre ce qu'on souhaiterait prouver et ce que l'architecture réelle permet honnêtement de prouver.
