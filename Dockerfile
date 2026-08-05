@@ -1,27 +1,30 @@
-FROM python:3.12-slim
+FROM apache/superset:latest
 
-WORKDIR /app
+USER root
+RUN /usr/local/bin/python -m pip install --no-cache-dir --no-deps --target=/app/.venv/lib/python3.10/site-packages \
+    sqlalchemy-bigquery \
+    google-cloud-bigquery \
+    google-cloud-core \
+    google-api-core \
+    google-resumable-media \
+    google-crc32c \
+    proto-plus \
+    googleapis-common-protos \
+    grpcio \
+    grpcio-status
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN rm -rf /app/.venv/lib/python3.10/site-packages/sqlalchemy \
+           /app/.venv/lib/python3.10/site-packages/sqlalchemy-*.dist-info \
+           /app/.venv/lib/python3.10/site-packages/SQLAlchemy-*.dist-info \
+           /app/.venv/lib/python3.10/site-packages/SQLAlchemy.libs && \
+    /usr/local/bin/python -m pip install --no-cache-dir --no-deps --target=/app/.venv/lib/python3.10/site-packages "sqlalchemy==1.4.54"
 
-COPY shop_ci_dbt/ ./shop_ci_dbt/
-COPY data_brute/ ./data_brute/
-COPY charger_csv_bigquery.py .
-COPY dagster_shop_ci/ ./dagster_shop_ci/
 
-ENV GOOGLE_APPLICATION_CREDENTIALS=/app/.secrets.json
-ENV DBT_PROJECT_DIR=/app/shop_ci_dbt
-ENV DAGSTER_HOME=/app/dagster_home
+COPY superset_config.py /app/pythonpath/superset_config.py
 
-RUN mkdir -p /app/dagster_home && \
-    mkdir -p /root/.dbt && \
-    printf 'shop_ci_dbt:\n  target: bigquery_dev\n  outputs:\n    bigquery_dev:\n      type: bigquery\n      method: service-account\n      project: shop-503309\n      dataset: shop_ci_dev\n      threads: 4\n      keyfile: /app/.secrets.json\n      location: US\n' > /root/.dbt/profiles.yml
+USER superset
 
-COPY dagster_shop_ci/dagster.yaml /app/dagster_home/dagster.yaml
-
-WORKDIR /app/dagster_shop_ci
-
-EXPOSE 3000
-
-CMD sh -c "cd /app/shop_ci_dbt && dbt deps && dbt parse --target bigquery_dev && cd /app/dagster_shop_ci && dagster-webserver -h 0.0.0.0 -p 3000 -f dagster_shop_ci/definitions.py & dagster-daemon run -f dagster_shop_ci/definitions.py"
+CMD superset db upgrade && \
+    (superset fab create-admin --username admin --firstname Admin --lastname User --email admin@shopci.local --password admin || true) && \
+    superset init && \
+    superset run -h 0.0.0.0 -p 8088

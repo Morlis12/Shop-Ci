@@ -30,3 +30,4 @@ shop_ci_dbt/owl/*.ttl
 # Fichiers secrets GCP (Correction stricte)
 .secrets.json
 **/.secrets.json
+superset_config.py

@@ -156,36 +156,42 @@ Hors dépôt (config système) :
 - **Chemins rendus portables** : `DBT_PROJECT_DIR` et `MANIFEST_PATH` utilisent `os.environ.get(...)` et `os.path.join(...)` plutôt que des chemins Windows codés en dur — un chemin de repli local pour l'usage sur la machine de développement, une variable `ENV` Docker pour le conteneur, sans jamais casser l'un ou l'autre.
 - **`dagster.yaml`** (fichier de configuration d'instance, distinct de `definitions.py`) copié explicitement à l'emplacement attendu par `DAGSTER_HOME` — déclare le `DagsterDaemonScheduler` et le `QueuedRunCoordinator`, indispensables pour qu'un schedule se déclenche réellement en arrière-plan.
 - **Limite honnête et non négociable** : l'orchestration ne tourne que **tant que le conteneur (et donc la machine hôte) reste allumé**. Contrairement à la CI GitHub Actions, hébergée par GitHub indépendamment de toute machine personnelle, ce conteneur Docker tourne physiquement sur la machine qui l'exécute — l'éteindre arrête le daemon, donc l'orchestration. Une vraie continuité 24/7 exigerait un hébergement cloud (VPS, Dagster+, ou Cloud Scheduler/Cloud Run) — non implémenté à ce stade, volontairement documenté plutôt que dissimulé.
-### 4.7 Conteneurisation (Docker) — le socle initial
+### 4.7 Restitution BI open source (Superset, Docker Compose)
+- **Architecture à deux services distincts** (`docker-compose.yml`) : `pipeline` (dbt + Dagster, déjà existant) et `superset` (nouveau), chacun avec sa propre responsabilité, son propre `Dockerfile`, redémarrant indépendamment — jamais un conteneur monolithique qui ferait tout.
+- **Pilote BigQuery installé dans un dossier séparé** (`/app/extra_packages`, exposé via `PYTHONPATH`) plutôt que directement dans le `site-packages` de l'image officielle — après plusieurs tentatives infructueuses d'installation directe (voir WRITE_UP pour le détail complet), cette approche s'est révélée la seule à éviter tout conflit avec la structure interne du dossier `google/` déjà présent dans l'image, et toute réécriture accidentelle de la version de SQLAlchemy (1.4.54) que Superset attend en interne.
+- **Clé secrète Superset générée explicitement** (`superset_config.py`, chargé via le mécanisme `/app/pythonpath/` prévu par Superset lui-même) — l'image officielle refuse de démarrer avec sa clé par défaut, publique et partagée par toute installation qui ne la change pas.
+- **Séquence d'initialisation complète au premier démarrage** : `superset db upgrade` (métadonnées) → `superset fab create-admin` (compte admin) → `superset init` (rôles/permissions) → `superset run` (serveur).
+- **Validé en conditions réelles** : connexion BigQuery établie depuis l'interface Superset, schéma `shop_ci_dev` détecté automatiquement, données réelles de `fait_ventes` consultables.
+### 4.8 Conteneurisation (Docker) — le socle initial
 - **Image autosuffisante** : le profil dbt (`profiles.yml`) est généré directement dans l'image au moment du build — aucun fichier de configuration externe requis, seulement la clé BigQuery.
 - **Secret jamais copié dans l'image** : clé de service injectée exclusivement au lancement via `docker run -v` (volume monté), jamais via `COPY` — vérifié concrètement par une recherche exhaustive à l'intérieur de l'image construite (`find / -name "*.secrets*"`), sans résultat.
 - **Mise en cache des couches** : `requirements.txt` copié et installé avant le reste du code.
 - **`.dockerignore` strict** : secrets, environnement virtuel, caches Dagster/Python, cibles dbt déjà compilées.
 - **Avertissement `SecretsUsedInArgOrEnv` compris, pas ignoré** : faux positif confirmé — la variable `ENV GOOGLE_APPLICATION_CREDENTIALS` ne contient qu'un chemin de fichier, jamais le secret lui-même.
 - **Validé en conditions réelles** : `dbt build --target bigquery_dev` complet depuis le conteneur, résultat rigoureusement identique au run local et à la CI (`PASS=79 WARN=1 ERROR=0`).
-### 4.8 Graphe de connaissances (RDF/OWL/SPARQL)
+### 4.9 Graphe de connaissances (RDF/OWL/SPARQL)
 Architecture en 4 fichiers (patron ontologie / export / classification / réinjection), entièrement sur BigQuery :
 - **Ontologie** (`01_schema.py`) : classes `Client`, `Produit`, `Vente` ; sous-classes de décision (`ClientVIP`, `ClientARisque`, `ClientNonIdentifie`, `ProduitStar`, `ProduitMargeFaible`...) documentées avec leur règle exacte.
 - **Export** (`02_export.py`) : peuplement des individus réels depuis BigQuery (client officiel `google-cloud-bigquery`, lecture structurelle sans écriture).
 - **Classification** (`03_classify.py`) : règles SPARQL `CONSTRUCT` appliquées par ordre de priorité, contrôle de cohérence automatisé.
 - **Réinjection** (`04_ecrire_labels_BigQuery.py`) : réécrit la classification dans BigQuery sous forme de table plate `mart_decisions`, via un load job (`WRITE_TRUNCATE`) — distinct d'une requête DML, donc autorisé même sur le sandbox gratuit.
 - Résultat courant : 499 clients (47 VIP, 10 à risque, 6 nouveaux, 1 non identifié, 435 standards) · 20 produits (2 stars, 6 à marge faible, 12 standards).
-### 4.9 Serveur MCP maison
+### 4.10 Serveur MCP maison
 4 outils exposés à un agent IA (Claude Desktop) : `interroger_graphe` (SPARQL libre), `lister_categorie`, `expliquer_categorie`, `calculer_metrique`. Contournement documenté : MetricFlow non invocable en sous-processus (sandboxing Windows Store / AppContainer) — `calculer_metrique` recalcule `ca_officiel` directement via SPARQL, résultat rigoureusement identique car le même filtre est appliqué dès l'export du graphe.
  
-### 4.10 Power BI
+### 4.11 Power BI
 - Connexion **ODBC** vers `dev.duckdb` (pilote officiel DuckDB, piège de configuration documenté sur le champ "Database" du DSN).
 - Table `mart_decisions` réinjectée, modèle relationnel en étoile avec deux requêtes filtrées (`decisions_clients`, `decisions_produits`) pour éviter toute ambiguïté de jointure entre identifiants clients et produits.
 - Mesures DAX répliquant fidèlement le semantic layer : `ca_officiel`, `marge`, `taux_marge`, `nb_commandes_officiel`, `panier_moyen`.
 - Format de sauvegarde **`.pbip`** plutôt que `.pbix` : versionnable en texte/JSON.
 - Chargement en parallèle désactivé (option Power BI) pour respecter la contrainte mono-écrivain de DuckDB.
-### 4.11 Data Vault (Hub / Link / Satellite)
+### 4.12 Data Vault (Hub / Link / Satellite)
 - **3 Hubs** (`hub_client`, `hub_produit`, `hub_commande`) : identité pure, hash key via `dbt_utils.generate_surrogate_key`, business key, `load_date`, `record_source`. `hub_client` couvre volontairement les **510 identités brutes** (avant dédoublonnage de `stg_clients`), pas seulement les 500 survivants.
 - **3 Links** : `link_vente` (N-aire, 3 hubs, 7373 lignes), `link_paiement` (rattaché au seul `hub_commande`, inclut les retries, 2896 lignes), `link_client_same_as` (documente les 10 doublons de façon traçable et réversible, sans jamais fusionner — contrairement à `int_correspondance_clients` côté Kimball).
 - **5 Satellites** : contexte descriptif + `hash_diff`, reconstruits systématiquement depuis la source brute — `sat_client` recalcule lui-même `nom_complet` (concaténation prénom+nom) plutôt que d'hériter de `stg_clients`.
 - **9 tests d'intégrité** (`relationships` sur chaque hash key, imbriqués sous `columns:`) : 8 PASS, 1 WARN documenté — 91 vraies commandes orphelines, un chiffre plus précis que les 101 connus côté Kimball.
 - **Coexiste avec Kimball**, sans le remplacer.
-### 4.12 MCP Power BI officiel (Microsoft)
+### 4.13 MCP Power BI officiel (Microsoft)
 - **Deux serveurs MCP actifs simultanément** dans la même session Claude Desktop : `shop-ci` (maison) et `powerbi-modeling-mcp` (extension VS Code officielle Microsoft, connexion locale via XMLA au fichier `.pbip` ouvert dans Power BI Desktop).
 - **Lecture confirmée** : 14 tables et 6 mesures DAX listées, identiques à ce qui existait déjà.
 - **Vérification croisée validée** : `ca_officiel` calculé indépendamment par le graphe SPARQL et par Power BI DAX donne le même résultat (157 449 600).
@@ -238,6 +244,7 @@ docker run --rm -v "$(pwd)\.secrets.json:/app/.secrets.json" shop-ci-pipeline
  
 ## 6. Limitations connues et décisions assumées
  
+- **Le pilote BigQuery de Superset vit dans un dossier séparé du reste des paquets** (`/app/extra_packages`, via `PYTHONPATH`), pas dans le `site-packages` standard — une solution de contournement robuste et testée, mais moins "propre" architecturalement qu'une installation native ; à surveiller en cas de montée de version future de l'image `apache/superset`.
 - **L'orchestration Docker ne tourne que tant que la machine hôte est allumée** — contrairement à la CI GitHub Actions (hébergée indépendamment par GitHub), le conteneur Dagster tourne physiquement sur la machine qui l'exécute. Éteindre l'ordinateur ou fermer Docker Desktop arrête le daemon, donc l'orchestration. Une vraie continuité 24/7 exigerait un hébergement cloud (VPS, Dagster+, ou Cloud Scheduler/Cloud Run) — non implémenté, documenté honnêtement plutôt que présenté comme résolu.
 - **Palier gratuit BigQuery sans DML/MERGE** : `--full-refresh --exclude path:snapshots` appliqué uniformément sur les 4 modes d'exécution (manuel, CI, Dagster, Docker) — contournement temporaire, résolu par l'activation de la facturation (en restant dans le palier gratuit permanent de traitement).
 - **MetricFlow non invocable en sous-processus depuis le serveur MCP** : contournement via SPARQL direct sur le graphe pour `ca_officiel`. `marge` a la donnée exportée mais pas encore l'outil MCP correspondant.
@@ -268,3 +275,4 @@ docker run --rm -v "$(pwd)\.secrets.json:/app/.secrets.json" shop-ci-pipeline
 ---
  
 *Voir aussi : [WRITE_UP.md](./WRITE_UP.md) pour le récit complet du projet, [DICTIONNAIRE.md](./DICTIONNAIRE.md) pour le glossaire technique, et [tests_pedagogiques/](./tests_pedagogiques/) pour 19 modules de révision interactifs couvrant l'intégralité du projet.*
+ 

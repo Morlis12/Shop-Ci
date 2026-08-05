@@ -1,0 +1,20 @@
+services:
+  pipeline:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./.secrets.json:/app/.secrets.json
+    container_name: shop-ci-pipeline
+
+  superset:
+    build:
+      context: .
+      dockerfile: Dockerfile.superset
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./.secrets.json:/app/.secrets.json
+    container_name: shop-ci-superset
