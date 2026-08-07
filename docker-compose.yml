@@ -1,20 +1,32 @@
 services:
-  pipeline:
+  pipeline-webserver:
     build: .
     restart: unless-stopped
-    ports:
-      - "3000:3000"
+    ports: ["3000:3000"]
     volumes:
       - ./.secrets.json:/app/.secrets.json
-    container_name: shop-ci-pipeline
+      - dagster_home:/app/dagster_home
+    command: sh -c "cd /app/shop_ci_dbt && dbt deps && dbt parse --target bigquery_dev && cd /app/dagster_shop_ci && dagster-webserver -h 0.0.0.0 -p 3000 -f dagster_shop_ci/definitions.py"
+    container_name: shop-ci-pipeline-webserver
+
+  pipeline-daemon:
+    build: .
+    restart: unless-stopped
+    volumes:
+      - ./.secrets.json:/app/.secrets.json
+      - dagster_home:/app/dagster_home
+    command: sh -c "cd /app/shop_ci_dbt && dbt deps && dbt parse --target bigquery_dev && cd /app/dagster_shop_ci && dagster-daemon run -f dagster_shop_ci/definitions.py"
+    container_name: shop-ci-pipeline-daemon
 
   superset:
     build:
       context: .
       dockerfile: Dockerfile.superset
     restart: unless-stopped
-    ports:
-      - "8088:8088"
+    ports: ["8088:8088"]
     volumes:
       - ./.secrets.json:/app/.secrets.json
     container_name: shop-ci-superset
+
+volumes:
+  dagster_home:
