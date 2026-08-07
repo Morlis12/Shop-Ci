@@ -272,6 +272,30 @@ Face à cette accumulation de conflits de structure, la solution qui a fonctionn
  
 ---
  
+## Partie 14 — La dérive silencieuse : quand un système marche, puis s'arrête sans rien avoir changé
+ 
+### Un symptôme qui n'a jamais eu de sens au premier abord
+ 
+Après plus de 25 heures de fonctionnement continu, l'interface Dagster est devenue subitement inaccessible depuis le navigateur — alors que Superset, sur le même hôte, la même infrastructure Docker, continuait de répondre normalement. Le conteneur affichait pourtant `healthy` sans interruption, son propre health check interne continuant de répondre toutes les trente secondes sans faille. Ce contraste — un service qui se déclare en bonne santé tout en devenant injoignable de l'extérieur — a demandé une démarche de diagnostic plus longue et plus prudente que la plupart des chantiers précédents, précisément parce que chaque hypothèse plausible s'est révélée fausse une par une, jamais confirmée par une vérification directe.
+ 
+### Écarter méthodiquement, une hypothèse à la fois
+ 
+La première hypothèse — un ancien processus Windows local en conflit avec le port — s'est effondrée dès la vérification : le processus identifié n'était qu'un composant interne normal de Docker Desktop, recréé automatiquement, pas un résidu oublié. La deuxième hypothèse — une instabilité du sous-système réseau WSL2 après un cycle de veille prolongé — semblait initialement confirmée par des trous de plusieurs heures dans les journaux d'activité, révélateurs d'une mise en veille de la machine. Mais un test décisif l'a écartée à son tour : une requête envoyée **depuis un conteneur voisin**, sans jamais transiter par le réseau Windows, échouait exactement de la même façon. Le problème ne vivait donc ni dans Windows, ni dans WSL2, ni dans le pont réseau entre les deux — il vivait à l'intérieur du conteneur Dagster lui-même.
+ 
+### La vraie cause : un processus mal supervisé, pas un réseau instable
+ 
+Le `CMD` du conteneur combinait `dagster-webserver` et `dagster-daemon` dans un seul processus shell, le webserver placé en arrière-plan via l'opérateur `&`, le daemon restant seul au premier plan. Dans un environnement Docker, le tout premier processus démarré occupe une position particulière pour la gestion des signaux système — un processus relégué en arrière-plan par un simple `&` n'a pas cette même garantie de supervision, et peut se dégrader progressivement sans jamais provoquer de crash franc, seulement une perte de liaison réseau externe qui n'apparaît qu'après une longue durée d'activité. La correction a consisté à séparer les deux rôles en deux conteneurs entièrement distincts, chacun avec son propre processus principal correctement supervisé — une architecture plus proche de la vraie pratique de production que la version compacte initiale.
+ 
+### Une nouvelle cause révélée par la correction elle-même
+ 
+Cette séparation en deux conteneurs a immédiatement révélé un second problème, resté invisible tant que les deux rôles cohabitaient dans un seul conteneur partageant un seul système de fichiers : chaque conteneur possède son propre espace de fichiers indépendant, y compris pour le code source du projet dbt copié pendant la construction de l'image. Le manifest dbt, généré par une commande explicite au démarrage, n'était présent que dans le conteneur qui l'avait réellement exécutée — le second, chargé de l'exécution effective des runs, ne l'avait jamais généré lui-même, provoquant un échec systématique de toute tentative de matérialisation, alors même que l'interface elle-même fonctionnait parfaitement et affichait correctement la liste des assets.
+ 
+### Une régression silencieuse, découverte par accident
+ 
+Au même moment, une vérification de routine sur Superset a révélé qu'il avait perdu l'accès à BigQuery — non pas à cause d'une nouvelle erreur, mais parce que le fichier de configuration de son image avait été, à un moment non identifié de la session, remplacé par une version antérieure déjà abandonnée plusieurs chapitres auparavant, recréant exactement le conflit de structure avec le dossier `google/` déjà résolu à l'époque. Cette découverte a rappelé une leçon déjà croisée dans ce projet, sous une forme nouvelle : un fichier de configuration édité au fil d'une longue session peut revenir, sans intention, à un état antérieur — la vérification du contenu réel avant toute nouvelle hypothèse reste, encore une fois, le seul réflexe fiable.
+ 
+---
+ 
 ## Ce que ce projet démontre
  
 Au-delà de l'empilement technique, ce projet est une démonstration de méthode : auditer avant de transformer, gouverner une définition avant de la multiplier, documenter une décision plutôt que la cacher — et, chapitre après chapitre, reconnaître qu'un même symptôme peut cacher des causes de nature radicalement différente. La CI a rappelé qu'un système qui tourne chez son créateur ne prouve rien tant qu'il ne tourne pas identiquement ailleurs. Docker a poussé cette preuve à son terme. Le Data Vault a montré qu'une règle qu'on vient de poser mérite d'être vérifiée sur son premier cas concret, pas simplement appliquée de mémoire. Le chantier MCP Power BI, en clôture, a rappelé la discipline la plus simple et la plus souvent négligée : savoir reconnaître, avant de démontrer quoi que ce soit, la différence entre ce qu'on souhaiterait prouver et ce que l'architecture réelle permet honnêtement de prouver.
@@ -279,4 +303,3 @@ Au-delà de l'empilement technique, ce projet est une démonstration de méthode
 ---
  
 *Ce document sera enrichi au fil des prochains chantiers : Superset, OpenClaw, gouvernance/RGPD, second projet dédié aux packages dbt de certification.*
- 

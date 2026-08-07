@@ -162,36 +162,41 @@ Hors dépôt (config système) :
 - **Clé secrète Superset générée explicitement** (`superset_config.py`, chargé via le mécanisme `/app/pythonpath/` prévu par Superset lui-même) — l'image officielle refuse de démarrer avec sa clé par défaut, publique et partagée par toute installation qui ne la change pas.
 - **Séquence d'initialisation complète au premier démarrage** : `superset db upgrade` (métadonnées) → `superset fab create-admin` (compte admin) → `superset init` (rôles/permissions) → `superset run` (serveur).
 - **Validé en conditions réelles** : connexion BigQuery établie depuis l'interface Superset, schéma `shop_ci_dev` détecté automatiquement, données réelles de `fait_ventes` consultables.
-### 4.8 Conteneurisation (Docker) — le socle initial
+### 4.8 Docker Compose — architecture webserver/daemon séparée (correction post-production)
+- **Séparation de `dagster-webserver` et `dagster-daemon` en deux conteneurs distincts** (`pipeline-webserver`, `pipeline-daemon`), chacun devenant le vrai PID 1 de son propre conteneur — remplace la combinaison via `&` dans un seul `CMD`, qui se dégradait après une longue durée d'activité (port devenu inaccessible depuis l'extérieur après ~25h et plusieurs cycles de veille/réveil de la machine hôte, malgré un healthcheck interne toujours vert).
+- **Volume nommé partagé** (`dagster_home`) entre les deux conteneurs, pour qu'ils voient le même historique de runs et la même configuration d'instance (`dagster.yaml`).
+- **Piège découvert et corrigé** : chaque conteneur possède son propre système de fichiers indépendant pour `/app/shop_ci_dbt/`, même en partageant le volume `dagster_home` — le manifest dbt (`manifest.json`) doit donc être généré séparément dans **chaque** conteneur qui en a besoin. `pipeline-daemon` ne le générait initialement jamais, provoquant un échec de matérialisation malgré une interface Dagster parfaitement fonctionnelle.
+- **Régression identifiée et corrigée** : `Dockerfile.superset` avait été accidentellement écrasé par une version antérieure (l'approche `--target=site-packages` directe), recréant le conflit avec le dossier `google/` déjà résolu au chapitre précédent — restauré vers l'approche `/app/extra_packages` + `PYTHONPATH`.
+### 4.9 Conteneurisation (Docker) — le socle initial
 - **Image autosuffisante** : le profil dbt (`profiles.yml`) est généré directement dans l'image au moment du build — aucun fichier de configuration externe requis, seulement la clé BigQuery.
 - **Secret jamais copié dans l'image** : clé de service injectée exclusivement au lancement via `docker run -v` (volume monté), jamais via `COPY` — vérifié concrètement par une recherche exhaustive à l'intérieur de l'image construite (`find / -name "*.secrets*"`), sans résultat.
 - **Mise en cache des couches** : `requirements.txt` copié et installé avant le reste du code.
 - **`.dockerignore` strict** : secrets, environnement virtuel, caches Dagster/Python, cibles dbt déjà compilées.
 - **Avertissement `SecretsUsedInArgOrEnv` compris, pas ignoré** : faux positif confirmé — la variable `ENV GOOGLE_APPLICATION_CREDENTIALS` ne contient qu'un chemin de fichier, jamais le secret lui-même.
 - **Validé en conditions réelles** : `dbt build --target bigquery_dev` complet depuis le conteneur, résultat rigoureusement identique au run local et à la CI (`PASS=79 WARN=1 ERROR=0`).
-### 4.9 Graphe de connaissances (RDF/OWL/SPARQL)
+### 4.10 Graphe de connaissances (RDF/OWL/SPARQL)
 Architecture en 4 fichiers (patron ontologie / export / classification / réinjection), entièrement sur BigQuery :
 - **Ontologie** (`01_schema.py`) : classes `Client`, `Produit`, `Vente` ; sous-classes de décision (`ClientVIP`, `ClientARisque`, `ClientNonIdentifie`, `ProduitStar`, `ProduitMargeFaible`...) documentées avec leur règle exacte.
 - **Export** (`02_export.py`) : peuplement des individus réels depuis BigQuery (client officiel `google-cloud-bigquery`, lecture structurelle sans écriture).
 - **Classification** (`03_classify.py`) : règles SPARQL `CONSTRUCT` appliquées par ordre de priorité, contrôle de cohérence automatisé.
 - **Réinjection** (`04_ecrire_labels_BigQuery.py`) : réécrit la classification dans BigQuery sous forme de table plate `mart_decisions`, via un load job (`WRITE_TRUNCATE`) — distinct d'une requête DML, donc autorisé même sur le sandbox gratuit.
 - Résultat courant : 499 clients (47 VIP, 10 à risque, 6 nouveaux, 1 non identifié, 435 standards) · 20 produits (2 stars, 6 à marge faible, 12 standards).
-### 4.10 Serveur MCP maison
+### 4.11 Serveur MCP maison
 4 outils exposés à un agent IA (Claude Desktop) : `interroger_graphe` (SPARQL libre), `lister_categorie`, `expliquer_categorie`, `calculer_metrique`. Contournement documenté : MetricFlow non invocable en sous-processus (sandboxing Windows Store / AppContainer) — `calculer_metrique` recalcule `ca_officiel` directement via SPARQL, résultat rigoureusement identique car le même filtre est appliqué dès l'export du graphe.
  
-### 4.11 Power BI
+### 4.12 Power BI
 - Connexion **ODBC** vers `dev.duckdb` (pilote officiel DuckDB, piège de configuration documenté sur le champ "Database" du DSN).
 - Table `mart_decisions` réinjectée, modèle relationnel en étoile avec deux requêtes filtrées (`decisions_clients`, `decisions_produits`) pour éviter toute ambiguïté de jointure entre identifiants clients et produits.
 - Mesures DAX répliquant fidèlement le semantic layer : `ca_officiel`, `marge`, `taux_marge`, `nb_commandes_officiel`, `panier_moyen`.
 - Format de sauvegarde **`.pbip`** plutôt que `.pbix` : versionnable en texte/JSON.
 - Chargement en parallèle désactivé (option Power BI) pour respecter la contrainte mono-écrivain de DuckDB.
-### 4.12 Data Vault (Hub / Link / Satellite)
+### 4.13 Data Vault (Hub / Link / Satellite)
 - **3 Hubs** (`hub_client`, `hub_produit`, `hub_commande`) : identité pure, hash key via `dbt_utils.generate_surrogate_key`, business key, `load_date`, `record_source`. `hub_client` couvre volontairement les **510 identités brutes** (avant dédoublonnage de `stg_clients`), pas seulement les 500 survivants.
 - **3 Links** : `link_vente` (N-aire, 3 hubs, 7373 lignes), `link_paiement` (rattaché au seul `hub_commande`, inclut les retries, 2896 lignes), `link_client_same_as` (documente les 10 doublons de façon traçable et réversible, sans jamais fusionner — contrairement à `int_correspondance_clients` côté Kimball).
 - **5 Satellites** : contexte descriptif + `hash_diff`, reconstruits systématiquement depuis la source brute — `sat_client` recalcule lui-même `nom_complet` (concaténation prénom+nom) plutôt que d'hériter de `stg_clients`.
 - **9 tests d'intégrité** (`relationships` sur chaque hash key, imbriqués sous `columns:`) : 8 PASS, 1 WARN documenté — 91 vraies commandes orphelines, un chiffre plus précis que les 101 connus côté Kimball.
 - **Coexiste avec Kimball**, sans le remplacer.
-### 4.13 MCP Power BI officiel (Microsoft)
+### 4.14 MCP Power BI officiel (Microsoft)
 - **Deux serveurs MCP actifs simultanément** dans la même session Claude Desktop : `shop-ci` (maison) et `powerbi-modeling-mcp` (extension VS Code officielle Microsoft, connexion locale via XMLA au fichier `.pbip` ouvert dans Power BI Desktop).
 - **Lecture confirmée** : 14 tables et 6 mesures DAX listées, identiques à ce qui existait déjà.
 - **Vérification croisée validée** : `ca_officiel` calculé indépendamment par le graphe SPARQL et par Power BI DAX donne le même résultat (157 449 600).
@@ -275,4 +280,5 @@ docker run --rm -v "$(pwd)\.secrets.json:/app/.secrets.json" shop-ci-pipeline
 ---
  
 *Voir aussi : [WRITE_UP.md](./WRITE_UP.md) pour le récit complet du projet, [DICTIONNAIRE.md](./DICTIONNAIRE.md) pour le glossaire technique, et [tests_pedagogiques/](./tests_pedagogiques/) pour 19 modules de révision interactifs couvrant l'intégralité du projet.*
+ 
  

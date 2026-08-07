@@ -1,4 +1,3 @@
-
 # Dictionnaire — Shop_CI
  
 Glossaire des termes techniques employés dans le projet, organisé par domaine. Document vivant, complété au fil des chantiers.
@@ -227,6 +226,18 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
  
 ---
  
+## Architecture Docker Compose avancée (webserver/daemon séparés)
+ 
+**Processus mal supervisé (`&` en shell)** — Combiner deux processus dans un seul `CMD` via `&` place le second en arrière-plan, sans la même garantie de supervision des signaux que le processus principal (PID 1) — peut se dégrader silencieusement après une longue durée d'activité, sans crash franc.
+ 
+**Systèmes de fichiers indépendants entre conteneurs, même avec un volume partagé** — Un volume nommé partage un chemin précis entre conteneurs, mais chaque conteneur garde son propre système de fichiers pour tout le reste (y compris le code copié pendant le build) — un artefact généré (comme `manifest.json`) doit être régénéré indépendamment dans chaque conteneur qui en a besoin.
+ 
+**Régression de fichier de configuration** — Un fichier édité au fil d'une longue session peut revenir à un état antérieur sans intention explicite — toujours vérifier le contenu réel avant de supposer qu'une correction déjà appliquée est toujours en place.
+ 
+**Isolation de diagnostic inter-conteneurs** (`docker compose exec <service_A> ... http://service_B:port`) — Teste la connectivité réseau interne à Docker Compose, indépendamment de la couche réseau Windows/WSL2 — permet de distinguer un problème de conteneur d'un problème d'infrastructure hôte.
+ 
+---
+ 
 ## Orchestration en production (Dagster dans Docker)
  
 **`dagster dev` vs production** — `dagster dev` combine serveur web et exécution en un seul processus de développement ; son schedule ne se déclenche que si ce mode reste actif. La production sépare `dagster-daemon` (déclenchement réel des schedules) et `dagster-webserver` (supervision optionnelle).
@@ -264,4 +275,5 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
 **`load_date` / `record_source`** — Métadonnées obligatoires sur chaque table Data Vault.
  
 **Coexistence Kimball / Data Vault** — Les deux modélisations partagent le même staging mais restent indépendantes, répondant à des besoins différents (restitution rapide vs audit et traçabilité).
+ 
  
