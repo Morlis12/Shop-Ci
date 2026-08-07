@@ -1,83 +1,3 @@
-
-Claude a terminé la réponse.
-Question fondamentale, et la réponse est oui — sans détour ni faux espoir, il faut être clair là-dessus.
-
-Le vrai principe, incontournable, quel que soit l'outil (Docker, Dagster, un serveur classique) : un conteneur Docker est un processus qui tourne sur ta machine. Si la machine s'éteint, ou si Docker Desktop est fermé, tout ce qui tourne dedans s'arrête aussi — le daemon Dagster, le serveur web, tout. Il n'y a pas de mode "orchestration qui continue même ordinateur éteint" possible avec cette architecture, ce n'est techniquement pas envisageable.
-
-Pourquoi c'est différent de la CI GitHub Actions
-Souviens-toi : GitHub Actions fonctionnait indépendamment de ta machine parce que GitHub héberge lui-même le serveur qui exécute tes workflows — ce n'est jamais ton PC qui tourne, mais une machine chez GitHub. Ton conteneur Docker actuel, lui, tourne physiquement sur ton ordinateur — donc il dépend entièrement de sa disponibilité.
-
-Les vraies solutions, si tu veux une orchestration qui tourne 24/7 sans dépendre de ta machine
-Option A — Héberger le conteneur sur un serveur cloud toujours allumé. Un petit VPS (par exemple sur OVH, DigitalOcean, ou même une VM légère sur Google Cloud, cohérent avec ton usage BigQuery déjà en place), où tu déploies exactement ce même conteneur Docker — mais cette fois sur une machine qui tourne en permanence, pas la tienne. Le principe technique ne change pas, juste où le conteneur vit physiquement.
-
-Option B — Dagster+ (le service cloud managé), qu'on avait volontairement écarté au début pour rester sur Dagster OSS gratuit — c'est littéralement le produit commercial pensé pour ce besoin exact : héberger le daemon et l'orchestration sans jamais dépendre d'une machine personnelle.
-
-Option C — Une tâche planifiée cloud plus simple, sans même Dagster : un Cloud Scheduler (Google Cloud, cohérent avec ton usage BigQuery) qui déclenche directement un job ponctuel (par exemple, un Cloud Run exécutant dbt build) à heure fixe — moins riche en observabilité que Dagster, mais bien plus simple et économique pour un besoin strictement "tourner tous les jours à 6h".
-
-Ce qu'il faut retenir pour l'usage actuel de Shop_CI
-Ce qu'on vient de construire est correct et complet pour la démonstration et l'apprentissage — un conteneur autonome, orchestration automatique tant qu'il tourne. Documenter honnêtement cette limite (comme on l'a fait pour toutes les autres) est la bonne approche, plutôt que de prétendre à une continuité 24/7 qu'on n'a pas réellement construite.
-
-Veux-tu qu'on documente cette limite maintenant dans le README (cohérent avec notre discipline habituelle), ou qu'on explore une des trois options d'hébergement cloud tout de suite ? 🔧
-
-oui ajoutons
-
-
-Orchestrated targeted documentation updates for Docker-Dagster integration
-Orchestrated targeted documentation updates for Docker-Dagster integration
-Numérotation cassée — corrigeons ça proprement avant de continuer.
-
-
-Corriger la numérotation séquentielle des sections
-Corriger la numérotation séquentielle des sections
-Numérotation propre maintenant. Ajoutons aussi la limitation dans la section 6 et une entrée dans la feuille de route.
-
-
-2 fichiers modifiés
-2 fichiers modifiés
-Ajoutons maintenant le récit dans le WRITE_UP et les termes dans le DICTIONNAIRE.
-
-
-2 fichiers modifiés, a exécuté une commande, lu un fichier
-2 fichiers modifiés, a exécuté une commande, lu un fichier
-Les trois documents sont à jour, avec des ajouts ciblés cette fois plutôt qu'une réécriture complète — cohérent avec ta remarque précédente, chaque section reste entière, rien n'a été résumé.
-
-Ce qui a été ajouté précisément :
-
-README — nouvelle section 4.6 (Dagster embarqué dans Docker), renumérotation propre des sections suivantes (4.7 à 4.12), une nouvelle limitation honnête en section 6, une nouvelle ligne en feuille de route
-WRITE_UP — Partie 12 complète, racontant fidèlement la chaîne d'erreurs (chemin mal formé, manifest absent au build, faute de frappe .ynl/.yaml) et la distinction dev/production qui s'est révélée nécessaire
-DICTIONNAIRE — 6 nouveaux termes (dagster-daemon, dagster.yaml, génération runtime du manifest, chemin portable, orchestration liée à la machine hôte)
-Commit :
-
-powershell
-cd "C:\Users\Laptop Studio\Documents\Shop Ci"
-git add README.md WRITE_UP.md DICTIONNAIRE.md
-git status
-powershell
-git commit -m "Documentation : Dagster embarque dans Docker + limitation hebergement" -m "- Nouveau chapitre : daemon + webserver embarques dans le conteneur, service autonome plutot qu'execution ponctuelle
-- Chaine de corrections documentee : chemin portable os.path.join, generation du manifest au runtime, dagster.yaml au bon emplacement, faute de frappe d'extension
-- Limitation honnete ajoutee : l'orchestration Docker depend de la machine hote, contrairement a la CI GitHub Actions -- continuite 24/7 non implementee, prochaine etape identifiee"
-git push
-Une fois poussé, on passe enfin à Superset ? 🔧
-
-
-Readme
-Document · MD 
-
-Write up
-Document · MD 
-
-Dictionnaire
-Document · MD 
-
-
-docker stop 6e57eb8b4c16
-
-
-
-Claude est une IA et peut faire des erreurs. Veuillez vérifier les réponses.
-
-
-Dictionnaire · MD
 # Dictionnaire — Shop_CI
  
 Glossaire des termes techniques employés dans le projet, organisé par domaine. Document vivant, complété au fil des chantiers.
@@ -292,6 +212,32 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
  
 ---
  
+## Restitution BI open source (Superset)
+ 
+**`PYTHONPATH` vs `site-packages`** — Deux façons de rendre un paquet Python découvrable : l'installer dans le dossier standard (`site-packages`, risque de conflit avec l'existant) ou dans un dossier séparé ajouté explicitement au chemin de recherche (`PYTHONPATH`, jamais de conflit puisque jamais de partage d'espace).
+ 
+**Namespace package cassé par réorganisation** — Quand un paquet tiers (ex. `protobuf`) réécrit la structure d'un dossier partagé (ex. `google/`) sans fusionner proprement avec son contenu existant, des sous-modules déjà installés (ex. `google.auth`) peuvent devenir invisibles sans avoir été supprimés physiquement.
+ 
+**Conflit de casse sur un système de fichiers sensible à la casse** — Deux dossiers de métadonnées (`sqlalchemy-*.dist-info` et `SQLAlchemy-*.dist-info`) peuvent coexister sans jamais s'écraser mutuellement sur Linux, rendant une suppression incomplète invisible à l'œil nu.
+ 
+**`--upgrade` avec `pip install --target`** — Sans ce flag, `pip` refuse silencieusement (simple avertissement, pas une erreur bloquante) d'écrire dans un dossier cible qui contient déjà des fichiers du même paquet.
+ 
+**Séquence d'initialisation Superset** — `superset db upgrade` (métadonnées) → `superset fab create-admin` (compte admin) → `superset init` (rôles) → `superset run` (serveur) : jamais automatique au premier démarrage d'une image officielle.
+ 
+---
+ 
+## Architecture Docker Compose avancée (webserver/daemon séparés)
+ 
+**Processus mal supervisé (`&` en shell)** — Combiner deux processus dans un seul `CMD` via `&` place le second en arrière-plan, sans la même garantie de supervision des signaux que le processus principal (PID 1) — peut se dégrader silencieusement après une longue durée d'activité, sans crash franc.
+ 
+**Systèmes de fichiers indépendants entre conteneurs, même avec un volume partagé** — Un volume nommé partage un chemin précis entre conteneurs, mais chaque conteneur garde son propre système de fichiers pour tout le reste (y compris le code copié pendant le build) — un artefact généré (comme `manifest.json`) doit être régénéré indépendamment dans chaque conteneur qui en a besoin.
+ 
+**Régression de fichier de configuration** — Un fichier édité au fil d'une longue session peut revenir à un état antérieur sans intention explicite — toujours vérifier le contenu réel avant de supposer qu'une correction déjà appliquée est toujours en place.
+ 
+**Isolation de diagnostic inter-conteneurs** (`docker compose exec <service_A> ... http://service_B:port`) — Teste la connectivité réseau interne à Docker Compose, indépendamment de la couche réseau Windows/WSL2 — permet de distinguer un problème de conteneur d'un problème d'infrastructure hôte.
+ 
+---
+ 
 ## Orchestration en production (Dagster dans Docker)
  
 **`dagster dev` vs production** — `dagster dev` combine serveur web et exécution en un seul processus de développement ; son schedule ne se déclenche que si ce mode reste actif. La production sépare `dagster-daemon` (déclenchement réel des schedules) et `dagster-webserver` (supervision optionnelle).
@@ -329,4 +275,5 @@ Glossaire des termes techniques employés dans le projet, organisé par domaine.
 **`load_date` / `record_source`** — Métadonnées obligatoires sur chaque table Data Vault.
  
 **Coexistence Kimball / Data Vault** — Les deux modélisations partagent le même staging mais restent indépendantes, répondant à des besoins différents (restitution rapide vs audit et traçabilité).
+ 
  

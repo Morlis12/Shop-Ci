@@ -234,6 +234,68 @@ Le chantier a mis au jour une distinction restée implicite depuis le tout premi
  
 ---
  
+## Partie 13 — Superset : la plus longue chaîne de diagnostic du projet
+ 
+### Un chantier qui semblait simple, jusqu'à ce qu'il ne le soit pas
+ 
+L'idée de départ tenait en une phrase : installer Superset via Docker, y ajouter le pilote BigQuery, terminé. La réalité a exigé une dizaine de corrections successives, chacune logique sur le moment, avant d'atteindre une image stable — la démonstration la plus concrète de tout le projet que le nombre d'étapes prévues au départ ne garantit jamais le nombre d'étapes réelles.
+ 
+### Premier obstacle : Superset refuse de démarrer, volontairement
+ 
+Le tout premier échec n'était pas une erreur mais une protection : l'image officielle refuse de démarrer avec sa clé secrète par défaut, publique et identique pour quiconque n'a jamais pris la peine de la changer. Une fois comprise, cette protection s'est révélée être exactement le genre de garde-fou que ce projet valorise déjà ailleurs — mieux vaut un refus explicite qu'un déploiement vulnérable par oubli silencieux.
+ 
+### Deuxième obstacle : où Python cherche-t-il sa configuration
+ 
+Le mécanisme précis par lequel `/app/pythonpath/superset_config.py` prend le pas sur la configuration interne de Superset a nécessité d'expliciter un principe Python généralement invisible : l'ordre de résolution des imports selon les chemins de recherche (`PYTHONPATH`), où le premier fichier du bon nom trouvé l'emporte, sans qu'aucune intelligence particulière ne soit à l'œuvre — un mécanisme purement mécanique, pas une décision de l'application.
+ 
+### Troisième obstacle : l'initialisation jamais automatique
+ 
+Une tentative de connexion avec les identifiants par défaut a échoué par une erreur serveur, sans message clair côté interface. La cause, une fois les vrais logs consultés : l'image officielle n'initialise jamais automatiquement sa base de métadonnées ni son compte administrateur — une séquence explicite (`db upgrade`, `create-admin`, `init`) est requise au premier démarrage, jamais implicite.
+ 
+### Quatrième obstacle, le plus long : le pilote BigQuery invisible
+ 
+Une fois Superset accessible, "Google BigQuery" n'apparaissait simplement pas dans la liste des bases supportées. Ce qui a suivi est devenu la chaîne de diagnostic la plus longue de tout le projet, traversant plusieurs couches de causes distinctes :
+ 
+**Un `.venv` sans `pip`.** La première tentative d'installation a révélé que l'image Superset utilise un environnement virtuel dédié, volontairement dépourvu de `pip` en son sein — une pratique de durcissement fréquente sur des images de production, jamais rencontrée jusque-là dans ce projet.
+ 
+**Un conflit de casse sur le système de fichiers.** Une fois `pip` correctement invoqué via le Python système avec un `--target` pointant vers le bon dossier, un avertissement resté d'abord ignoré (`already exists, specify --upgrade`) a fini par expliquer pourquoi le paquet, pourtant "installé avec succès" selon les logs, restait invisible : le dossier `google/` existait déjà nativement dans l'image, et `pip`, sans `--upgrade`, refusait poliment d'y toucher.
+ 
+**Une version de SQLAlchemy silencieusement écrasée.** Une fois le pilote BigQuery réellement présent, Superset a cessé de démarrer, bloqué sur une fonction supprimée d'une version récente de SQLAlchemy que son propre code interne utilise encore. La cause : notre installation avait entraîné une version plus récente de SQLAlchemy que celle que l'image avait soigneusement figée. La correction, en apparence triviale (réinstaller la bonne version explicitement), a elle-même buté sur un piège inattendu : deux dossiers de métadonnées coexistaient sous des casses différentes (`sqlalchemy-*.dist-info` et `SQLAlchemy-*.dist-info`), un artefact invisible à l'œil nu sur un système de fichiers sensible à la casse, expliquant pourquoi une suppression qui semblait complète ne l'était pas.
+ 
+**Un fichier édité plusieurs fois, dont seule la version la plus ancienne persistait.** Après plusieurs corrections apparemment sans effet, la vérification directe du contenu réel du `Dockerfile` a révélé qu'aucune des trois dernières modifications n'avait en réalité été sauvegardée — un exact rappel de l'incident déjà vécu avec les fichiers Dagster, cette fois sur un fichier édité de façon répétée plutôt que jamais créé.
+ 
+**Une structure de dossier réorganisée par une dépendance tierce.** Une fois SQLAlchemy stabilisé, une nouvelle absence est apparue : `google.auth`, pourtant déjà présent avant, avait disparu sans qu'on y ait jamais touché directement — un paquet installé en cours de route (`protobuf`) avait réorganisé la structure du dossier `google/` d'une façon qui a cassé la découverte des sous-modules déjà présents.
+ 
+### La résolution finale : cesser de forcer, isoler proprement
+ 
+Face à cette accumulation de conflits de structure, la solution qui a fonctionné n'a pas été une nouvelle tentative de réparation ciblée, mais un changement d'approche : installer le pilote BigQuery et toutes ses vraies dépendances dans un dossier **entièrement séparé** du reste de l'installation, jamais mélangé avec les paquets déjà présents, puis indiquer à Python de chercher aussi dans ce dossier via `PYTHONPATH` — sans jamais rien écraser de ce qui existait déjà. Une solution moins élégante qu'une intégration native, mais robuste précisément parce qu'elle élimine la source de tous les conflits précédents : le partage d'un même espace de noms entre deux installations aux attentes incompatibles.
+ 
+---
+ 
+## Partie 14 — La dérive silencieuse : quand un système marche, puis s'arrête sans rien avoir changé
+ 
+### Un symptôme qui n'a jamais eu de sens au premier abord
+ 
+Après plus de 25 heures de fonctionnement continu, l'interface Dagster est devenue subitement inaccessible depuis le navigateur — alors que Superset, sur le même hôte, la même infrastructure Docker, continuait de répondre normalement. Le conteneur affichait pourtant `healthy` sans interruption, son propre health check interne continuant de répondre toutes les trente secondes sans faille. Ce contraste — un service qui se déclare en bonne santé tout en devenant injoignable de l'extérieur — a demandé une démarche de diagnostic plus longue et plus prudente que la plupart des chantiers précédents, précisément parce que chaque hypothèse plausible s'est révélée fausse une par une, jamais confirmée par une vérification directe.
+ 
+### Écarter méthodiquement, une hypothèse à la fois
+ 
+La première hypothèse — un ancien processus Windows local en conflit avec le port — s'est effondrée dès la vérification : le processus identifié n'était qu'un composant interne normal de Docker Desktop, recréé automatiquement, pas un résidu oublié. La deuxième hypothèse — une instabilité du sous-système réseau WSL2 après un cycle de veille prolongé — semblait initialement confirmée par des trous de plusieurs heures dans les journaux d'activité, révélateurs d'une mise en veille de la machine. Mais un test décisif l'a écartée à son tour : une requête envoyée **depuis un conteneur voisin**, sans jamais transiter par le réseau Windows, échouait exactement de la même façon. Le problème ne vivait donc ni dans Windows, ni dans WSL2, ni dans le pont réseau entre les deux — il vivait à l'intérieur du conteneur Dagster lui-même.
+ 
+### La vraie cause : un processus mal supervisé, pas un réseau instable
+ 
+Le `CMD` du conteneur combinait `dagster-webserver` et `dagster-daemon` dans un seul processus shell, le webserver placé en arrière-plan via l'opérateur `&`, le daemon restant seul au premier plan. Dans un environnement Docker, le tout premier processus démarré occupe une position particulière pour la gestion des signaux système — un processus relégué en arrière-plan par un simple `&` n'a pas cette même garantie de supervision, et peut se dégrader progressivement sans jamais provoquer de crash franc, seulement une perte de liaison réseau externe qui n'apparaît qu'après une longue durée d'activité. La correction a consisté à séparer les deux rôles en deux conteneurs entièrement distincts, chacun avec son propre processus principal correctement supervisé — une architecture plus proche de la vraie pratique de production que la version compacte initiale.
+ 
+### Une nouvelle cause révélée par la correction elle-même
+ 
+Cette séparation en deux conteneurs a immédiatement révélé un second problème, resté invisible tant que les deux rôles cohabitaient dans un seul conteneur partageant un seul système de fichiers : chaque conteneur possède son propre espace de fichiers indépendant, y compris pour le code source du projet dbt copié pendant la construction de l'image. Le manifest dbt, généré par une commande explicite au démarrage, n'était présent que dans le conteneur qui l'avait réellement exécutée — le second, chargé de l'exécution effective des runs, ne l'avait jamais généré lui-même, provoquant un échec systématique de toute tentative de matérialisation, alors même que l'interface elle-même fonctionnait parfaitement et affichait correctement la liste des assets.
+ 
+### Une régression silencieuse, découverte par accident
+ 
+Au même moment, une vérification de routine sur Superset a révélé qu'il avait perdu l'accès à BigQuery — non pas à cause d'une nouvelle erreur, mais parce que le fichier de configuration de son image avait été, à un moment non identifié de la session, remplacé par une version antérieure déjà abandonnée plusieurs chapitres auparavant, recréant exactement le conflit de structure avec le dossier `google/` déjà résolu à l'époque. Cette découverte a rappelé une leçon déjà croisée dans ce projet, sous une forme nouvelle : un fichier de configuration édité au fil d'une longue session peut revenir, sans intention, à un état antérieur — la vérification du contenu réel avant toute nouvelle hypothèse reste, encore une fois, le seul réflexe fiable.
+ 
+---
+ 
 ## Ce que ce projet démontre
  
 Au-delà de l'empilement technique, ce projet est une démonstration de méthode : auditer avant de transformer, gouverner une définition avant de la multiplier, documenter une décision plutôt que la cacher — et, chapitre après chapitre, reconnaître qu'un même symptôme peut cacher des causes de nature radicalement différente. La CI a rappelé qu'un système qui tourne chez son créateur ne prouve rien tant qu'il ne tourne pas identiquement ailleurs. Docker a poussé cette preuve à son terme. Le Data Vault a montré qu'une règle qu'on vient de poser mérite d'être vérifiée sur son premier cas concret, pas simplement appliquée de mémoire. Le chantier MCP Power BI, en clôture, a rappelé la discipline la plus simple et la plus souvent négligée : savoir reconnaître, avant de démontrer quoi que ce soit, la différence entre ce qu'on souhaiterait prouver et ce que l'architecture réelle permet honnêtement de prouver.
